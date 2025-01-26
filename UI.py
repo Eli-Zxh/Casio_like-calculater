@@ -201,7 +201,8 @@ class CasioCalculator:
         while i < len(string):
             match string[i]:
                 case '\\':
-                    match string[i:i+5]:
+                    start_index = find_start_position('{' + string, i, '}{')#找第一个任意括号，分割运算符函数
+                    match string[i:start_index]:
                         case r'\frac': #分式
                             operator_replacements.append(r'\frac')#标识为分式
                             if string[i+5] == '{':#找第一个括号{}，如果没有，立刻报错
@@ -246,6 +247,125 @@ class CasioCalculator:
                                         continue
                                     else: raise ValueError("invalid expression")
                                 case _: raise ValueError("invalid expression")#根式后无{}或者[]，立刻报错
+                        case r'\int':
+                            operator_replacements.append(r'\int')#标识为积分
+                            match string[i+4]:
+                                case '_'|'^':#定积分
+                                    int_string = string[i+4:]#切开积分
+                                    down_index = find_character_position(int_string,'_')#找积分下限
+                                    if int_string[down_index + 1] == '{':#非单字符
+                                        down_end_index = find_matching_braces(int_string, down_index + 1, '{}')#找积分下限对应的括号
+                                        operator_replacements.append(int_string[down_index + 2:down_end_index-1])#识别积分下限
+                                    elif int_string[down_index + 1].isalpha() or int_string[down_index + 1].isdigit():#单字符识别
+                                        operator_replacements.append(int_string[down_index + 1])
+                                    else: raise ValueError("invalid down limit")
+                                    up_index = find_character_position(int_string,'^')#找积分上限
+                                    if int_string[up_index + 1] == '{':#非单字符
+                                        up_end_index = find_matching_braces(int_string, up_index + 1, '{}')#找积分上限对应的括号
+                                        operator_replacements.append(int_string[up_index + 2:up_end_index-1])#识别积分上限
+                                    elif int_string[up_index + 1].isalpha() or int_string[up_index + 1].isdigit():#单字符识别
+                                        operator_replacements.append(int_string[up_index + 1])
+                                    else: raise ValueError("invalid up limit")
+                                    end_index = max(down_end_index,up_end_index)#取下限和上限的最大值
+                                    int_string = int_string[end_index+1:]
+                                case '{':#不定积分
+                                    operator_replacements.append('')#下限传空
+                                    operator_replacements.append('')#上限传空
+                                    int_string = string[i+4:]#切开积分表达式
+                            expression_index = find_character_position(int_string,'{')#找积分表达式#不定积分与定积分处理表达式方式相同
+                            if expression_index != -1:
+                                end_index = find_matching_braces(int_string, expression_index, '{}')#找积分表达式的}对应位置
+                                int_string = int_string[expression_index+1:end_index-1]#切开表达式
+                                d_index = find_character_position(int_string,'d')#找微分变量，如果不存在默认为x,如果存在，必须在积分表达式末尾
+                                if d_index != -1:#如果为特殊积分变量
+                                    d_string = int_string[d_index+1:]#切开积分变量表达式
+                                    if d_string[0] == '{' or d_string == '(':
+                                        operator_replacements.append(d_string[1:-1])#去括号，识别积分变量
+                                    else:operator_replacements.append(int_string[d_index+1:])#识别积分变量
+                                else: operator_replacements.append('x')#默认为x
+                                operator_replacements.append(int_string[:d_index - 1])#识别积分表达式
+                            else: raise ValueError("invalid expression")#无表达式，立刻报错
+                        case r'\sum'|r'\prod':#累加与累乘处理方式相同
+                            operator_replacements.append(string[i:start_index])#标识为累加/累乘
+                            sum_string = string[start_index:]
+                            down_index = find_character_position(sum_string,'_')#找下限
+                            if down_index != -1:
+                                if sum_string[down_index + 1] == '{':#非单字符
+                                    down_end_index = find_matching_braces(sum_string, down_index + 1, '{}')#找下限对应的括号
+                                    down_expression = sum_string[down_index + 2:down_end_index-1]#单列下限方程
+                                    equal_index = find_character_position(down_expression,'=')#找等号
+                                    if equal_index != -1:#定值求和
+                                        operator_replacements.append(down_expression[:equal_index-1])#识别求和变量
+                                        operator_replacements.append(sum_string[equal_index + 1:])#识别下限
+                                    else:
+                                        operator_replacements.append(down_expression[down_index + 1:down_end_index-1])#识别求和变量
+                                        is_variable = True
+                                        operator_replacements.append('')#不定求和下限记录为空
+                                elif sum_string[down_index + 1].isdigit():#允许单数字下标
+                                    operator_replacements.append('i')#此时求和变量必须为i
+                                    operator_replacements.append(sum_string[down_index + 1:])#识别下限
+                                else: raise ValueError("invalid down limit")
+                            else: raise ValueError("invalid down limit")#不允许没有求和下限
+                            up_index = find_character_position(sum_string,'^')#找上限
+                            if up_index != -1:
+                                if sum_string[up_index + 1] == '{':#非单字符
+                                    up_end_index = find_matching_braces(sum_string, up_index + 1, '{}')#找上限对应的括号
+                                    operator_replacements.append(sum_string[up_index + 2:up_end_index-1])#识别上限
+                                elif sum_string[up_index + 1].isalpha() or sum_string[up_index + 1].isdigit():#允许单字符
+                                    operator_replacements.append(sum_string[up_index + 1])#识别上限
+                                else: raise ValueError("invalid up limit")
+                            else: 
+                                if is_variable:operator_replacements.append('')#不定求和记为空
+                                else: raise ValueError("invalid up limit")
+                            end_index = max(down_end_index,up_end_index)#取下限和上限的最大值
+                            sum_string = sum_string[end_index+1:]
+                            expression_index = find_character_position(sum_string,'{')#找表达式,不允许单字符
+                            if expression_index != -1:
+                                end_index = find_matching_braces(sum_string, expression_index, '{}')#找表达式的}对应位置
+                                operator_replacements.append(sum_string[expression_index+1:end_index-1])#识别表达式
+                            else: raise ValueError("invalid expression")#无表达式，立刻报错
+                        case r'\log':#普通对数函数
+                            operator_replacements.append('\log')
+                            down_index = find_character_position(string, '_')#找下标
+                            if down_index != -1:
+                                if string[down_index+1] == '{':#多字符
+                                    end_index = find_matching_braces(string, down_index, '{}')#找到对应下标括号
+                                    operator_replacements.append(string[down_index+2:end_index])#识别底数
+                                else: operator_replacements.append(string[down_index+1])#单字符识别下标
+                            else: operator_replacements.append('10')#默认底为10
+                            start_braces_index = find_character_position(string,'(')#找真数
+                            if start_braces_index != -1:
+                                end__braces_index = find_matching_braces(string,start_braces_index,'()')#找到对应括号
+                                operator_replacements.append(string[start_braces_index:end__braces_index])#识别真数
+                            else: raise ValueError(f'invalid function log')
+                        case r'\lim':#极限
+                            operator_replacements.append('\lim')
+                            down_index = find_character_position(string, '_')#找下标
+                            if down_index != -1:
+                                if sum_string[down_index + 1] == '{':#非单字符
+                                    down_end_index = find_matching_braces(sum_string, down_index + 1, '{}')#找下限对应的括号
+                                    down_expression = sum_string[down_index + 2:down_end_index-1]#单列下限方程
+                                #     equal_index = find_character_position(down_expression,'')#找等号
+                                #     if equal_index != -1:#定值求和
+                                #         operator_replacements.append(down_expression[:equal_index-1])#识别求和变量
+                                #         operator_replacements.append(sum_string[equal_index + 1:])#识别下限
+                                #     else:
+                                #         operator_replacements.append(down_expression[down_index + 1:down_end_index-1])#识别求和变量
+                                #         is_variable = True
+                                #         operator_replacements.append('')#不定求和下限记录为空
+                                # elif sum_string[down_index + 1].isdigit():#允许单数字下标
+                                #     operator_replacements.append('i')#此时求和变量必须为i
+                                #     operator_replacements.append(sum_string[down_index + 1:])#识别下限
+                                else: raise ValueError("invalid down limit")
+                            else: raise ValueError("invalid limit")#不允许没有极限下限
+                        case r'\san'|r'\cos'|r'\tan'|r'\sec'|r'csc'|r'cot'|r'sinh'|r'cosh'|r'tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'exp'|r'ln'|r'lg':#所有三类函数
+                            func = string[i:start_index] 
+                            operator_replacements.append(func)#添加第三类函数对应标识
+                            start_braces_index = find_character_position(string,'(')#找到第一个括号
+                            if start_braces_index != -1:
+                                end__braces_index = find_matching_braces(string,start_braces_index,'()')#找到对应括号
+                                operator_replacements.append(string[start_braces_index:end__braces_index])#切开识别数字或函数
+                            else: raise ValueError(f'invalid function {func}')
                         case _: 
                             i += 2 #不属于这三类运算块，跳过次运算块
                             continue
@@ -346,8 +466,7 @@ class CasioCalculator:
         except Exception as e:
             print(f"Error rendering LaTeX: {e}")
 def find_matching_braces(s, start, brace_type='{}'):#匹配括号,s为字符串，start为起始位置，brace_type为括号类型，返回匹配的括号位置
-            stack = []
-            brace_map = {'(': ')', '[': ']', '{': '}'}
+            stack = []    
             open_brace, close_brace = brace_type
             for i in range(start, len(s)):
                 if s[i] == open_brace:
@@ -358,6 +477,33 @@ def find_matching_braces(s, start, brace_type='{}'):#匹配括号,s为字符串�
                         if not stack:
                             return i
             return -1
+
+def find_start_position(string,start_index):#寻找起始位置
+    brace_map = {'(','[','{','_','^'}
+    for i in range(start_index,len(string)):
+        if string[i] in brace_map:
+            return i-1
+        elif i < len(string)-1:
+            continue
+    return -1
+
+def find_character_position(string: str, target: str):#寻找字符位置
+    stack = []
+    in_map = {'(','[','{'}
+    out_map = {')',']','}'}
+    if target in out_map or target in in_map:
+        for i in range(len(string)):
+            if string[i] == target:
+                return i
+    for i in range(len(string)):
+        if string[i] == target and not stack:
+            return i
+        elif string[i] in in_map:
+            stack.append(string[i])
+        elif string[i] in out_map:
+            stack.pop()
+    return -1
+
 
 if __name__ == "__main__":
     root = tk.Tk()
