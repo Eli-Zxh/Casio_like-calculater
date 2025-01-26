@@ -1,3 +1,6 @@
 \frac{\frac{abc}{xyz}+\ln(2)}{x_0^2}-\frac{\sqrt{abc}}{2}=\overline{abc}+\sum_{i=1}^n{i^2+i}
 \int_0^{+\infty}{\frac{e^{x^2}\sin(ax^2)}{x^2}dx}
 \int_{\int_0^1sin(x)dx}^{+\infty}{e^{x^2}\sin(x^2)dx}
+\lim_{x\rightarrow0}{\lim_{y\rightarrow0}{\frac{xy}{x^2+y^2}}}
+\lim_{y\rightarrow0}{\frac{xy}{x^2+y^2}}
+\lim_{x\rightarrow\lim_{y\rightarrow0}{\frac{y}{1+y^2}}}{\frac{\sin(x)}{x}}

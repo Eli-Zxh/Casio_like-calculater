@@ -342,20 +342,19 @@ class CasioCalculator:
                             operator_replacements.append('\lim')
                             down_index = find_character_position(string, '_')#找下标
                             if down_index != -1:
-                                if sum_string[down_index + 1] == '{':#非单字符
-                                    down_end_index = find_matching_braces(sum_string, down_index + 1, '{}')#找下限对应的括号
-                                    down_expression = sum_string[down_index + 2:down_end_index-1]#单列下限方程
-                                #     equal_index = find_character_position(down_expression,'')#找等号
-                                #     if equal_index != -1:#定值求和
-                                #         operator_replacements.append(down_expression[:equal_index-1])#识别求和变量
-                                #         operator_replacements.append(sum_string[equal_index + 1:])#识别下限
-                                #     else:
-                                #         operator_replacements.append(down_expression[down_index + 1:down_end_index-1])#识别求和变量
-                                #         is_variable = True
-                                #         operator_replacements.append('')#不定求和下限记录为空
-                                # elif sum_string[down_index + 1].isdigit():#允许单数字下标
-                                #     operator_replacements.append('i')#此时求和变量必须为i
-                                #     operator_replacements.append(sum_string[down_index + 1:])#识别下限
+                                if string[down_index + 1] == '{':#非单字符
+                                    down_end_index = find_matching_braces(string, down_index + 1, '{}')#找下限对应的括号
+                                    down_expression = string[down_index + 2:down_end_index-1]#单列下限方程
+                                    index = down_expression.find(r'\rightarrow')#不允许变量嵌套极限，找右箭头
+                                    if index != -1:
+                                        operator_replacements.append(down_expression[:index-1])#识别变量
+                                        operator_replacements.append(down_expression[index+11:])#识别下限
+                                    else: raise ValueError("invalid down limit")
+                                    lim_expression = string[down_end_index+1:]#切出表达式，直接切分
+                                    if lim_expression[0] == '{':
+                                        end_index = find_matching_braces(lim_expression, 0, '{}')#找表达式的}对应位置
+                                        operator_replacements.append(lim_expression[1:end_index-1])#识别表达式
+                                    else: raise ValueError("invalid expression")#无表达式，立刻报错
                                 else: raise ValueError("invalid down limit")
                             else: raise ValueError("invalid limit")#不允许没有极限下限
                         case r'\san'|r'\cos'|r'\tan'|r'\sec'|r'csc'|r'cot'|r'sinh'|r'cosh'|r'tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'exp'|r'ln'|r'lg':#所有三类函数
@@ -379,6 +378,13 @@ class CasioCalculator:
                     else:
                         raise ValueError("invalid expression")
         return operator_replacements
+    
+    def is_final_list(operator:list):#第三步，判断是否为最终的可计算的列表
+        pass
+    
+    def latex_to_list(string: str):#第四步，递归处理，转为最终计算列表
+        cal_list = CasioCalculator._setup_special_operators(string)
+        return cal_list
     
     def _assign_command(self, button, btn_text):#按钮绑定事件
         if btn_text in '0123456789+-':
