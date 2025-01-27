@@ -338,7 +338,7 @@ class CasioCalculator:
                                 end__braces_index = find_matching_braces(string,start_braces_index,'()')#找到对应括号
                                 operator_replacements.append(string[start_braces_index:end__braces_index])#识别真数
                             else: raise ValueError(f'invalid function log')
-                        case r'\lim':#极限
+                        case r'\lim'|r'\limsup'|r'\liminf':#极限，不区分左右
                             operator_replacements.append('\lim')
                             down_index = find_character_position(string, '_')#找下标
                             if down_index != -1:
@@ -357,7 +357,7 @@ class CasioCalculator:
                                     else: raise ValueError("invalid expression")#无表达式，立刻报错
                                 else: raise ValueError("invalid down limit")
                             else: raise ValueError("invalid limit")#不允许没有极限下限
-                        case r'\san'|r'\cos'|r'\tan'|r'\sec'|r'csc'|r'cot'|r'sinh'|r'cosh'|r'tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'exp'|r'ln'|r'lg':#所有三类函数
+                        case r'\san'|r'\cos'|r'\tan'|r'\sec'|r'\csc'|r'\cot'|r'\sinh'|r'\cosh'|r'\tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'\exp'|r'\ln'|r'\lg'|r'\arg'|r'\coth'|r'\deg':#所有三类函数
                             func = string[i:start_index] 
                             operator_replacements.append(func)#添加第三类函数对应标识
                             start_braces_index = find_character_position(string,'(')#找到第一个括号
@@ -365,6 +365,44 @@ class CasioCalculator:
                                 end__braces_index = find_matching_braces(string,start_braces_index,'()')#找到对应括号
                                 operator_replacements.append(string[start_braces_index:end__braces_index])#切开识别数字或函数
                             else: raise ValueError(f'invalid function {func}')
+                        case '\det':
+                            raise ValueError("常规模式暂不支持行列式运算")
+                        case '\dim':
+                            raise ValueError("常规模式暂不支持矩阵维度运算")
+                        case '\gcd':#最大公约数，辗转相除
+                            operator_replacements.append('\gcd')#添加辗转相除函数标识
+                            gcd_string = string[start_index + 1:]
+                            start_braces_index = find_character_position(gcd_string,'(')#找到第一个括号
+                            if start_braces_index != -1:
+                                end__braces_index = find_matching_braces(gcd_string,start_braces_index,'()')#找到对应括号
+                                comma_index = gcd_string.find(',')#找逗号
+                                operator_replacements.append(gcd_string[start_braces_index+1:comma_index-1])#切出式子1
+                                operator_replacements.append(gcd_string[comma_index+1:end__braces_index-1])#切出式子2
+                            else: raise ValueError("invalid func gcd")#无辗转相除式，立刻报错
+                        case r'\hom':
+                            raise ValueError("你觉得这个计算器能算范畴论吗？(恼)")
+                        case r'\max'|r'\sup':#最大值
+                            operator_replacements.append('\max')#添加最大值标识
+                            if string[start_index+1] == '{':
+                                end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
+                                min_string = string[start_index + 2:end_index-1]#切出集合
+                                parts = min_string.split(',')#切出集合元素
+                                for part in parts:
+                                    operator_replacements.append(part)#识别每个数字
+                            else: raise ValueError("invalid number")#无表达式，立刻报错
+                        case r'\ker':
+                            raise ValueError("暂不支持矩阵核运算")
+                        case r'\inf'|r'\min':#最小值
+                            operator_replacements.append('\min')#添加最小值标识
+                            if string[start_index+1] == '{':
+                                end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
+                                min_string = string[start_index + 2:end_index-1]#切出集合
+                                parts = min_string.split(',')#切出集合元素
+                                for part in parts:
+                                    operator_replacements.append(part)#识别每个数字
+                            else: raise ValueError("invalid number")#无表达式，立刻报错
+                        case r'\Pr':
+                            raise ValueError("请使用C,P,A上下标格式计算排列组合")
                         case _: 
                             i += 2 #不属于这三类运算块，跳过次运算块
                             continue
