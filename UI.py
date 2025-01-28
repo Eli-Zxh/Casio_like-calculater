@@ -6,15 +6,16 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 
 class CasioCalculator:
-    GH_letters = ['\alpha','\beta','\chi','\delta','\epsilon','\eta','\gamma','\iota',
-                  '\kappa','\lambda','\mu','\nu','ο','\omega','\phi','\pi',
-                  '\psi','\rho','\sigma','\tau','\theta','upsilon','\xi','\zeta',
-                  '\digamma','\varepsilon','\varkappa','\varphi','\varpi','\varrho','\varsigma','\vartheta',
-                  '\Delta','\Gamma','\Lambda','\Omega','\Phi','\Pi','\Psi','\Sigma',
-                  '\Theta','\Upsilon','\Xi','\aleph','\beth','daleth','\gimel']
-    special_operators = ['\frac','\sqrt','\int','\sum','\prod','\log','\lim','\limsup','\liminf','\sin','\cos','\tan',
-                        '\sec','\csc','\cot','\sinh','\cosh','\tanh','\arcsin','\arccos','\arctan','\exp','\ln','\lg',
-                        '\arg','\coth','\deg','\det','\dim','\gcd','\hom','\max','\sup','\ker','\inf','\min','\Pr']
+    GH_letters = [r'\alpha',r'\beta',r'\chi',r'\delta',r'\epsilon',r'\eta',r'\gamma',r'\iota',
+                  r'\kappa',r'\lambda',r'\mu',r'\nu',r'ο',r'\omega',r'\phi',r'\pi',
+                  r'\psi',r'\rho',r'\sigma',r'\tau',r'\theta',r'upsilon',r'\xi',r'\zeta',
+                  r'\digamma',r'\varepsilon',r'\varkappa',r'\varphi',r'\varpi',r'\varrho',r'\varsigma',r'\vartheta',
+                  r'\Delta',r'\Gamma',r'\Lambda',r'\Omega',r'\Phi',r'\Pi',r'\Psi',r'\Sigma',
+                  r'\Theta',r'\Upsilon',r'\Xi',r'\aleph',r'\beth',r'daleth',r'\gimel']
+    special_operators = [r'\frac',r'\sqrt',r'\int',r'\sum',r'\prod',r'\log',r'\lim',r'\limsup',r'\liminf',r'\sin',r'\cos',r'\tan',
+                        r'\sec',r'\csc',r'\cot',r'\sinh',r'\cosh',r'\tanh',r'\arcsin',r'\arccos',r'\arctan',r'\exp',r'\ln',r'\lg',
+                        r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr']
+    operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot']
     def __init__(self, root):#初始化计算器界面
         self.root = root
         self.root.title('Casio')
@@ -151,9 +152,20 @@ class CasioCalculator:
                     if not Braces_stack:
                         raise ValueError("Mismatched braces")
                     Braces_stack.pop()
-                case '+'|'-'|'=':
+                case '+'|'=':
                     if not Parentheses_stack and not Square_brackets_stack and not Braces_stack:#在栈为空的地方，按照+==分割string
-                        positions.append(index)# 记录符号的位置
+                        positions.append(index)#分割
+                case '-':#减号和负号压迫特殊处理
+                    if not Parentheses_stack and not Square_brackets_stack and not Braces_stack:#在栈为空的地方，按照+==分割string
+                        if index == 0:#如果首字符是-，那表示负号,不分割
+                            pass
+                        else:#非首字符
+                            if string[index -1] in CasioCalculator.operators:#-前面有运算符，一定表示负号，不分割
+                                pass
+                            elif string[index - 1] != 'E':#-前面有E，表明这为科学计数法，不分割
+                                pass
+                            else:#-前面没有运算符，且不是E，那表示减号，分割
+                                positions.append(index)#分割
             if not index:
                 positions.append(0)#记录第一个符号的位置
             if index == len(string) - 1:
@@ -171,17 +183,27 @@ class CasioCalculator:
         operator_replacements = []
         while i < len(string):
             match string[i]:
+                case '-':#负号，直接合并到operator_replacements中，并跳过
+                    operator_replacements.append('-')
+                    i += 1
+                    continue
                 case '\\':
                     if i+3 < len(string) and string[i:i+3] == r'\div':#2.1运算符不能按照find_start_position切开，给予单独判断
-                        operator_replacements.append('\div')#识别为除号
+                        if operator_replacements[-1] == '\times':#2.2如果前一个运算符是乘号，则替换为除号
+                            operator_replacements[-1] = '\div'#替换为除号
+                        else:operator_replacements.append('\div')#识别为除号
                         i += 4
                         continue
                     elif i+4 < len(string) and string[i:i+4] == r'\cdot':
-                        operator_replacements.append('\cdot')#识别为点乘
+                        if operator_replacements[-1] == '\times':#2.2如果前一个运算符是乘号，则替换为点乘
+                            operator_replacements[-1] = '\cdot'#替换为点乘
+                        else:operator_replacements.append('\cdot')#识别为点乘
                         i += 5
                         continue
                     elif i+5 < len(string) and string[i:i+5] == r'\times':
-                        operator_replacements.append('\times')#识别为叉乘
+                        if operator_replacements[-1] != '\times':#2.2如果前一个运算符是乘号，则替换为叉乘
+                            operator_replacements.append('\times')#识别为叉乘
+                        else:pass#不增加叉乘符号
                         i += 6
                         continue
                     start_index = find_start_position(string, i)#找第一个任意括号，分割运算符函数
@@ -197,7 +219,7 @@ class CasioCalculator:
                                         operator_replacements.append(string[end_index+2:end_index2-1])#识别分母
                                         i = end_index + 1#跳过原本分式结构
                                         if i < len(string):#如果不是运算块末尾
-                                            operator_replacements.append('\times')#添加乘法标识
+                                            operator_replacements.append(r'\times')#添加乘法标识
                                         continue
                                     else:
                                         raise ValueError("invalid expression")
@@ -217,7 +239,7 @@ class CasioCalculator:
                                             operator_replacements.append(string[end_index + 2:end_index2-1])#识别根式
                                             i = end_index + 1#跳过原本根式结构
                                             if i < len(string):#如果不是运算块末尾
-                                                operator_replacements.append('\times')#添加乘法标识
+                                                operator_replacements.append(r'\times')#添加乘法标识
                                             continue
                                         else:
                                             raise ValueError("invalid expression")
@@ -229,7 +251,7 @@ class CasioCalculator:
                                         operator_replacements.append(string[i+6:end_index-1])#把整个根式添加到替换列表中
                                         i = end_index + 1#跳过原本根式结构
                                         if i < len(string):#如果不是运算块末尾
-                                            operator_replacements.append('\times')#添加乘法标识
+                                            operator_replacements.append(r'\times')#添加乘法标识
                                         continue
                                     else: raise ValueError("invalid expression")
                                 case _: raise ValueError("invalid expression")#根式后无{}或者[]，立刻报错
@@ -272,7 +294,7 @@ class CasioCalculator:
                                 operator_replacements.append(int_string[:d_index - 1])#识别积分表达式
                                 i = end_index + 1#跳过原本积分结构
                                 if i < len(string):#如果不是运算块末尾
-                                    operator_replacements.append('\times')#添加乘法标识
+                                    operator_replacements.append(r'\times')#添加乘法标识
                             else: raise ValueError("invalid expression")#无表达式，立刻报错
                         case r'\sum'|r'\prod':#累加与累乘处理方式相同
                             operator_replacements.append(string[i:start_index])#标识为累加/累乘
@@ -317,7 +339,7 @@ class CasioCalculator:
                             if i < len(string):#如果不是运算块末尾
                                 operator_replacements.append('\times')#添加乘法标识
                         case r'\log':#普通对数函数
-                            operator_replacements.append('\log')
+                            operator_replacements.append(r'\log')
                             down_index = find_character_position(string, '_')#找下标
                             if down_index != -1:
                                 if string[down_index+1] == '{':#多字符
@@ -332,9 +354,9 @@ class CasioCalculator:
                             else: raise ValueError(f'invalid function log')
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append('\times')#添加乘法标识
+                                operator_replacements.append(r'\times')#添加乘法标识
                         case r'\lim'|r'\limsup'|r'\liminf':#极限，不区分左右
-                            operator_replacements.append('\lim')
+                            operator_replacements.append(r'\lim')
                             down_index = find_character_position(string, '_')#找下标
                             if down_index != -1:
                                 if string[down_index + 1] == '{':#非单字符
@@ -354,7 +376,7 @@ class CasioCalculator:
                             else: raise ValueError("invalid limit")#不允许没有极限下限
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append('\times')#添加乘法标识
+                                operator_replacements.append(r'\times')#添加乘法标识
                         case r'\sin'|r'\cos'|r'\tan'|r'\sec'|r'\csc'|r'\cot'|r'\sinh'|r'\cosh'|r'\tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'\exp'|r'\ln'|r'\lg'|r'\arg'|r'\coth'|r'\deg':#所有三类函数
                             func = string[i:start_index] 
                             operator_replacements.append(func)#添加第三类函数对应标识
@@ -375,13 +397,18 @@ class CasioCalculator:
                             else: raise ValueError(f'invalid function {func}')
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append('\times')#添加乘法标识
-                        case '\det':
+                                operator_replacements.append(r'\times')#添加乘法标识
+                        case r'\FACT':#分解质因子
+                            operator_replacements.append(r'\FACT')#添加分解质因子标识
+                            if string(start_index+1) == '(':#如果是括号
+                                end_index = find_matching_braces(string, start_index, '()')
+                                operator_replacements.append(string[start_index+1:end_index-1])#识别分解质因子表达式
+                        case r'\det':
                             raise ValueError("常规模式暂不支持行列式运算")
-                        case '\dim':
+                        case r'\dim':
                             raise ValueError("常规模式暂不支持矩阵维度运算")
-                        case '\gcd':#最大公约数，辗转相除
-                            operator_replacements.append('\gcd')#添加辗转相除函数标识
+                        case r'\gcd':#最大公约数，辗转相除
+                            operator_replacements.append(r'\gcd')#添加辗转相除函数标识
                             gcd_string = string[start_index + 1:]
                             start_braces_index = find_character_position(gcd_string,'(')#找到第一个括号
                             if start_braces_index != -1:
@@ -392,11 +419,11 @@ class CasioCalculator:
                             else: raise ValueError("invalid func gcd")#无辗转相除式，立刻报错
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append('\times')#添加乘法标识
+                                operator_replacements.append(r'\times')#添加乘法标识
                         case r'\hom':
                             raise ValueError("你觉得这个计算器能算范畴论吗？(恼)")
                         case r'\max'|r'\sup':#最大值
-                            operator_replacements.append('\max')#添加最大值标识
+                            operator_replacements.append(r'\max')#添加最大值标识
                             if string[start_index+1] == '{':
                                 end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
                                 min_string = string[start_index + 2:end_index-1]#切出集合
@@ -406,11 +433,13 @@ class CasioCalculator:
                             else: raise ValueError("invalid number")#无表达式，立刻报错
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append('\times')#添加乘法标识
+                                operator_replacements.append(r'\times')#添加乘法标识
                         case r'\ker':
                             raise ValueError("暂不支持矩阵核运算")
+                        case r'\Ran'|r'\Rnd'|r'\Ranint':
+                            raise ValueError("暂不支持随机数运算")
                         case r'\inf'|r'\min':#最小值
-                            operator_replacements.append('\min')#添加最小值标识
+                            operator_replacements.append(r'\min')#添加最小值标识
                             if string[start_index+1] == '{':
                                 end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
                                 min_string = string[start_index + 2:end_index-1]#切出集合
@@ -420,7 +449,7 @@ class CasioCalculator:
                             else: raise ValueError("invalid number")#无表达式，立刻报错
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append('\times')#添加乘法标识
+                                operator_replacements.append(r'\times')#添加乘法标识
                         case r'\Pr':
                             raise ValueError("请使用C,P,A上下标格式计算排列组合")
                         case _ if string[i:start_index] in CasioCalculator.GH_LETTERS: 
@@ -442,12 +471,101 @@ class CasioCalculator:
                     continue
                 case r'^':#幂次
                     operator_replacements.append('^')#添加幂次标识，幂次无需添加乘法标识
+                case r'|':#绝对值
+                    operator_replacements.append('\absolute')#添加绝对值标识，绝对值无需添加乘法标识
+                    absolute_string = string[i + 1:]#获取绝对值字符串
+                    end_index = i + find_character_position(absolute_string, '|')#找到绝对值对应)位置，如果没有则报错
+                    if end_index != i-1:
+                        operator_replacements.append(string[i:end_index])
+                    else:raise ValueError("invalid absolute value expression")
+                    i = end_index + 1#跳过原本绝对值结构
+                    if i < len(string):#如果不是运算块末尾
+                        operator_replacements.append('\times')#添加乘法标识
+                    continue
+                case r'C'|r'P'|r'A':#排列组合符号
+                    operator_replacements.append(string[i])#添加排列组合运算符
+                    match string[i+1]:
+                            case '_':#下标
+                                if i+2 < len(string):
+                                    if string[i+2] == '{':#非单字符下标
+                                        end_down_index = find_matching_braces(string, i + 2, '{}')#找下标对应的}位置
+                                        operator_replacements.append(string[i+3:end_down_index])#识别排列组合下标
+                                    else:
+                                        end_down_index = i + 2#单字符下标
+                                        operator_replacements.append(string[i+2])#识别排列组合下标
+                                if end_down_index + 2 < len(string):
+                                    if string[end_down_index + 1] == '^':#下标后有上标
+                                        if string[end_down_index + 2] == '{':#非单字符
+                                            end_index = find_matching_braces(string, end_down_index + 2, '{}')#找到对应的右括号
+                                            if end_up_index == -1:
+                                                raise ValueError("missing ')'")
+                                            operator_replacements.append(string[end_down_index + 3:end_up_index-1])
+                                        else:#单字符
+                                            end_index = end_down_index + 2
+                                            operator_replacements.append(string[end_down_index + 2])#识别上标
+                                else:raise ValueError("invalid combinatorics calculation")#下标后无上标，报错
+                                i = end_index + 1#跳过该字符
+                                if i < len(string):#如果不是运算块末尾
+                                    operator_replacements.append('\times')#添加乘法标识
+                                continue 
+                            case '^':#上标,先上标后下标的字母写法是被允许的
+                                if i+2 < len(string):#如果不是末尾
+                                    if string[i+2] == '{':#非单字符上标
+                                        end_up_index = find_matching_braces(string, i + 2, '{}')#找上标对应的}位置
+                                        power_string = string[i+3:end_index-1]#切出上标 
+                                    else:#单字符上标
+                                        end_up_index = i + 2
+                                        power_string = string[i+2]#切出上标
+                                if end_up_index + 1 < len(string):#如果不是末尾
+                                    if string[end_up_index+1] == '_':#如果后面还有下标
+                                        if end_up_index+2 < len(string) and string[end_up_index+2] == '{':#非单字符下标
+                                            end_index = find_matching_braces(string, end_up_index + 2, '{}')#找下标对应的}位置
+                                            operator_replacements.append(string[end_up_index+3:end_index])#识别下标
+                                            operator_replacements.append(power_string)#添加上标
+                                        else:
+                                            end_index = end_up_index + 2
+                                            operator_replacements.append(string[end_index])#识别下标
+                                            operator_replacements.append(power_string)#添加上标
+                                    else:raise ValueError("invalid combinatorics calculation")#没有下标，报错
+                                i = end_index + 1#跳过原本根式结构
+                                if i < len(string):#如果不是运算块末尾
+                                    operator_replacements.append('\times')#添加乘法标识
+                                continue
+                            case _:#没有上下标
+                                raise ValueError("invalid variable")#报错
                 case _ if string[i].isnumeric():#数字,包括小数
                     start_index = i
                     while i < len(string) and (string[i].isnumeric() or string[i] == '.'):#如果后面还有数字，就一直添加
                         i += 1
                     else: end_index = i
+                    num_string = string[start_index:end_index]
+                    if end_index+1 < len(string):#如果不是末尾
+                        if string[end_index+1] == '!':#识别阶乘
+                            if '.' not in num_string:#如果不是小数
+                                i+=1#跳过!
+                                operator_replacements.append(r'\factorial')#添加阶乘标识
+                            else:
+                                raise ValueError("invalid factorial")
+                        elif string[end_index+1] == r'E':#科学计数法
+                            for i in range(end_index+2,len(string)):#遍历，寻找计数法的末尾
+                                if i== end_index+2 and string[i] == '-':#允许第一个为负号
+                                    continue
+                                elif string[i].isnumeric:#数字继续遍历
+                                    continue
+                                else:#遇到非数字，结束遍历
+                                    SN_index = i-1
+                                    break
+                            SN_string = string[end_index+1:SN_index]#获取科学计数法字符串
+                            end_index = SN_index + 1
+                        elif string[end_index + 1] == r'%':#百分号
+                            SN_string = 'E-2'#记作10^-2
+                            end_index += 1
                     operator_replacements.append(string[start_index:end_index])#添加数字
+                    try:#如果存在科学计数法
+                        if SN_string:
+                            operator_replacements.append(SN_string)#添加科学计数法,没有则跳过，无视报错
+                    except:pass
+                    i = end_index + 1
                     if i < len(string):#如果不是运算块末尾
                         operator_replacements.append('\times')#添加乘法标识
                     continue
@@ -499,13 +617,15 @@ class CasioCalculator:
         for i in operator:#遍历
             if i.isnumeric():#数字
                 continue
-            elif i in CasioCalculator.special_operators:#特殊操作符
+            elif i in CasioCalculator.special_operators:#运算函数
                 continue
-            # elif len(i)=1 and i.isalpha():#字母
-            #     continue
             elif i in CasioCalculator.GH_letters:#希腊字母
                 continue
-        return True
+            elif i in CasioCalculator.operators:#运算符
+                continue
+            elif i.islist():#列表嵌套
+                return False,i
+        return True,operator
     
     def latex_to_list(string: str):#第四步，递归处理，转为最终计算列表
         cal_list = CasioCalculator._setup_special_operators(string)
@@ -597,7 +717,7 @@ class CasioCalculator:
         except Exception as e:
             print(f"Error rendering LaTeX: {e}")
 def find_matching_braces(s, start, brace_type='{}'):#匹配括号,s为字符串，start为起始位置，brace_type为括号类型，返回匹配的括号位置
-            stack = []    
+            stack = []
             open_brace, close_brace = brace_type
             for i in range(start, len(s)):
                 if s[i] == open_brace:
