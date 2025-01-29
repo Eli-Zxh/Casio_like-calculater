@@ -14,7 +14,7 @@ class CasioCalculator:
                   r'\Theta',r'\Upsilon',r'\Xi',r'\aleph',r'\beth',r'daleth',r'\gimel']
     special_operators = [r'\frac',r'\sqrt',r'\int',r'\sum',r'\prod',r'\log',r'\lim',r'\limsup',r'\liminf',r'\sin',r'\cos',r'\tan',
                         r'\sec',r'\csc',r'\cot',r'\sinh',r'\cosh',r'\tanh',r'\arcsin',r'\arccos',r'\arctan',r'\exp',r'\ln',r'\lg',
-                        r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr']
+                        r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr',r'\abs']
     operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot']
     def __init__(self, root):#初始化计算器界面
         self.root = root
@@ -125,12 +125,18 @@ class CasioCalculator:
         Braces_stack = []#三个栈
         positions = []#作为记录递归运算块位置的list
         parts = []#作为最终可识别计算的文件格式，用list存储
+        #第零步，判断其中是否存在非法字符，并对于绝对值进行特殊处理
         if '#' in string:#不允许出现#号
             ValueError("invalid expression")
         elif ' ' in string:#不允许存在空格
             string = string.replace(' ', '')
         elif '\n' in string:#不允许存在换行符
             string = string.replace('\n', '')
+        elif '|' in string:#出现||表示的绝对值
+            start_index = string.index('|')#找到第一个|的位置
+            end_index = find_character_position(string,'|',start_index)#找到对应括号栈值相等处的||位置
+            absolute_part = string[start_index+1:end_index-1]#提取出绝对值部分
+            string = string[:start_index] + r'\abs' + '(' + absolute_part + ')'+ string[end_index:]#替换为\abs(absolute_part)
         #第一步，\frac{}{},\sqrt[]{},\sqrt{},()为运算块判定，按照运算块外的+-=分割string
         for index, char in enumerate(string):#用栈的方式，在栈值为0的地方按照+==分割string
             match char:#匹配括号左括号入栈，右括号出栈
@@ -452,8 +458,53 @@ class CasioCalculator:
                                 operator_replacements.append(r'\times')#添加乘法标识
                         case r'\Pr':
                             raise ValueError("请使用C,P,A上下标格式计算排列组合")
-                        case _ if string[i:start_index] in CasioCalculator.GH_LETTERS: 
-                            operator_replacements.append(string[i:start_index])#识别希腊字母
+                        case r'\abs':
+                            operator_replacements.append(r'\abs')#添加绝对值标识
+                            if string[start_index+1] == '(':#如果是括号
+                                end_index = find_matching_braces(string, start_index, '()')
+                                operator_replacements.append(string[start_index+1:end_index-1])#识别绝对值表达式
+                            else: raise ValueError("invalid func abs")#无绝对值式，立刻报错
+                        case _ if string[i:start_index] in CasioCalculator.GH_letters:#希腊字母
+                            if start_index+1 < len(string):#如果不是最后一个字符
+                                match string[start_index+1]:
+                                    case '_':#下标
+                                        if start_index+2 < len(string):
+                                            if string[start_index+2] == '{':#非单字符下标
+                                                end_index = find_matching_braces(string, start_index + 2, '{}')#找下标对应的}位置
+                                                operator_replacements.append(string[i:end_index])#识别字母
+                                                i = end_index + 1#跳过该字符
+                                            else:
+                                                operator_replacements.append(string[i:start_index+2])#识别希腊字母
+                                                i += 2#跳过该字符
+                                    case '^':#上标,先上标后下标的字母写法是被允许的
+                                        if start_index+2 < len(string):#如果不是末尾
+                                            if string[start_index+2] == '{':#非单字符上标
+                                                end_up_index = find_matching_braces(string, start_index + 2, '{}')#找上标对应的}位置
+                                                power_string = string[start_index+3:end_index-1]#切出上标 
+                                            else:#单字符上标
+                                                end_up_index = start_index + 2
+                                                power_string = string[start_index+2]#切出上标
+                                        if end_up_index + 1 < len(string):#如果不是末尾
+                                            if string[end_up_index+1] == '_':#如果后面还有下标
+                                                if end_up_index+2 < len(string) and string[end_up_index+2] == '{':#非单字符下标
+                                                    end_index = find_matching_braces(string, end_up_index + 2, '{}')#找下标对应的}位置
+                                                    operator_replacements.append(string[i:start_index]+string[end_up_index+1:end_index])#识别字母以及对应下标
+                                                    operator_replacements.append('^')#添加幂次标识
+                                                    operator_replacements.append(power_string)#添加幂次
+                                                else:
+                                                    end_index = end_up_index + 2
+                                                    operator_replacements.append(string[i:start_index]+'_'+string[end_index])#识别希腊字母以及对应下标
+                                                    operator_replacements.append('^')#添加幂次标识
+                                                    operator_replacements.append(power_string)#添加幂次    
+                                    case _:#没有上下标
+                                        operator_replacements.append(string[i:start_index])#识别希腊字母
+                                        end_index = i
+                            else:
+                                operator_replacements.append(string[i])#识别字母
+                                end_index = i
+                            i = end_index + 1#跳过该字符
+                            if i < len(string):#如果不是运算块末尾
+                                operator_replacements.append('\times')#添加乘法标识
                             continue
                 case r'(':#括号
                     end_index = find_matching_braces(string, i, '()')#找到括号对应)位置，如果没有则报错
@@ -471,17 +522,17 @@ class CasioCalculator:
                     continue
                 case r'^':#幂次
                     operator_replacements.append('^')#添加幂次标识，幂次无需添加乘法标识
-                case r'|':#绝对值
-                    operator_replacements.append('\absolute')#添加绝对值标识，绝对值无需添加乘法标识
-                    absolute_string = string[i + 1:]#获取绝对值字符串
-                    end_index = i + find_character_position(absolute_string, '|')#找到绝对值对应)位置，如果没有则报错
-                    if end_index != i-1:
-                        operator_replacements.append(string[i:end_index])
-                    else:raise ValueError("invalid absolute value expression")
-                    i = end_index + 1#跳过原本绝对值结构
-                    if i < len(string):#如果不是运算块末尾
-                        operator_replacements.append('\times')#添加乘法标识
-                    continue
+                # case r'|':#绝对值
+                #     operator_replacements.append('\absolute')#添加绝对值标识，绝对值无需添加乘法标识
+                #     absolute_string = string[i + 1:]#获取绝对值字符串
+                #     end_index = i + find_character_position(absolute_string, '|')#找到绝对值对应)位置，如果没有则报错
+                #     if end_index != i-1:
+                #         operator_replacements.append(string[i:end_index])
+                #     else:raise ValueError("invalid absolute value expression")
+                #     i = end_index + 1#跳过原本绝对值结构
+                #     if i < len(string):#如果不是运算块末尾
+                #         operator_replacements.append('\times')#添加乘法标识
+                #     continue
                 case r'C'|r'P'|r'A':#排列组合符号
                     operator_replacements.append(string[i])#添加排列组合运算符
                     match string[i+1]:
@@ -614,22 +665,101 @@ class CasioCalculator:
         return operator_replacements
     
     def is_final_list(operator:list):#第三步，判断是否为最终的可计算的列表
+        main_letter = ''
+        parts = []
+        first_string = ''
         for i in operator:#遍历
-            if i.isnumeric():#数字
+            if i.isdigit():#整数
                 continue
-            elif i in CasioCalculator.special_operators:#运算函数
+            elif i.count('.')  == 1:#浮点数
+                parts = i.split('.')
+                if parts[0].isdigit() and parts[1].isdigit() and len(parts) == 2:#整数部分和浮点部分都是数字
+                    continue
+                else:
+                    return False,i
+            elif i in CasioCalculator.special_operators:#运算函数标识
                 continue
-            elif i in CasioCalculator.GH_letters:#希腊字母
+            elif i in CasioCalculator.GH_letters:#希腊字母判定，保留直接判定逻辑，以优化算法
                 continue
             elif i in CasioCalculator.operators:#运算符
                 continue
-            elif i.islist():#列表嵌套
-                return False,i
-        return True,operator
+            elif i == '':#空字符
+                continue
+            else:
+                first_string = i[0]#读取首字符
+                if first_string.isalpha():#字母
+                    if len(i) == 1:#单字符
+                        continue
+                    else:#多字符
+                        if i[1] != '_':#后面的字符不是下标
+                            return False,i
+                        else:#有下标
+                            if i[2] == '{':#非单字符下标
+                                for j in range(3,len(i)):#遍历i
+                                    if i[j].isdigit() or i[j].isalpha():#下标是数字或字母
+                                        continue
+                                    elif i[j] == '}':#出现}
+                                        if j == len(i)-1:#如果是运算块末尾
+                                            continue
+                                        else:#如果不是运算块末尾
+                                            return False,i
+                                    else:#其他非法字符
+                                        return False,i
+                            elif len(i) == 3:#单字符下标
+                                continue
+                            else:return ValueError("invalid expression")
+                elif first_string == r'\\':#其余允许的只剩下希腊字母
+                    for j in CasioCalculator.GH_letters:
+                        if i.find(j) == 0:#匹配到希腊字母
+                            main_letter = j
+                            break
+                    if len(main_letter) != 0:#如果匹配到了希腊字母
+                        if i[1] != '_':#后面的字符不是下标
+                            return False,i
+                        else:#有下标
+                            if i[2] == '{':#非单字符下标
+                                for k in range(3,len(i)):#遍历i
+                                    if i[k].isdigit() or i[k].isalpha():#下标是数字或字母
+                                        continue
+                                    elif i[k] == '}':#出现}
+                                        if k == len(i)-1:#如果是运算块末尾
+                                            break
+                                        else:#如果不是运算块末尾
+                                            return False,i
+                                    else:#其他非法字符
+                                        return False,i
+                            elif len(i) == 3:#单字符下标
+                                continue
+                            else:raise ValueError("invalid expression")
+                    continue
+        return True,''
     
     def latex_to_list(string: str):#第四步，递归处理，转为最终计算列表
-        cal_list = CasioCalculator._setup_special_operators(string)
-        return cal_list
+        # 初步分割为运算块
+        parts = CasioCalculator._setup_operators(string)
+        processed_parts = []
+        for part in parts:
+            # 递归处理每个子块
+            if any(op in part for op in CasioCalculator.special_operators):
+                # 存在特殊运算符，进一步解析
+                sub_parts = CasioCalculator._setup_special(part)
+                processed_sub = []
+                for sub_part in sub_parts:
+                    if isinstance(sub_part, list):
+                        # 嵌套结构（如分式的分子/分母）
+                        processed_sub.extend(CasioCalculator.latex_to_list(sub_part))
+                    else:
+                        processed_sub.append(sub_part)
+                processed_parts.append(processed_sub)
+            else:
+                # 普通块直接验证
+                is_valid, invalid_part = CasioCalculator.is_final_list([part])
+                if not is_valid:
+                    # 递归处理非法块（如括号内的表达式）
+                    processed_parts.append(CasioCalculator.latex_to_list(part))
+                else:
+                    processed_parts.append(part)
+        return processed_parts
     
     def _assign_command(self, button, btn_text):#按钮绑定事件
         if btn_text in '0123456789+-':
@@ -738,7 +868,7 @@ def find_start_position(string,start_index):#寻找起始位置
             continue
     return len(string)
 
-def find_character_position(string: str, target: str):#寻找字符位置
+def find_character_position(string: str, target: str,start_index = 0):#寻找字符位置
     stack = []
     in_map = {'(','[','{'}
     out_map = {')',']','}'}
@@ -746,7 +876,7 @@ def find_character_position(string: str, target: str):#寻找字符位置
         for i in range(len(string)):
             if string[i] == target:
                 return i
-    for i in range(len(string)):
+    for i in range(start_index,len(string)):
         if string[i] == target and not stack:
             return i
         elif string[i] in in_map:
