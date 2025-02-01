@@ -9,6 +9,58 @@ special_operators = [r'\frac',r'\sqrt',r'\int',r'\sum',r'\prod',r'\log',r'\lim',
                     r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr']
 operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot']
 
+class AbsProcessor:
+    def __init__(self):
+        self.pipe_stack = []  # 记录未匹配的 | 位置
+        self.brace_stacks = {"()": 0, "[]": 0, "{}": 0}  # 记录括号层级
+
+    def process(self, s: str) -> str:
+        chars = list(s)
+        output = []
+        i = 0
+        while i < len(chars):
+            c = chars[i]
+            # 更新括号栈状态
+            if c == "(":
+                self.brace_stacks["()"] += 1
+            elif c == ")":
+                if self.brace_stacks["()"] == 0:
+                    raise ValueError("Mismatched parentheses")
+                self.brace_stacks["()"] -= 1
+            elif c == "[":
+                self.brace_stacks["[]"] += 1
+            elif c == "]":
+                if self.brace_stacks["[]"] == 0:
+                    raise ValueError("Mismatched brackets")
+                self.brace_stacks["[]"] -= 1
+            elif c == "{":
+                self.brace_stacks["{}"] += 1
+            elif c == "}":
+                if self.brace_stacks["{}"] == 0:
+                    raise ValueError("Mismatched braces")
+                self.brace_stacks["{}"] -= 1
+            
+            # 处理绝对值符号 |（仅在括号栈为0时允许匹配）
+            if c == "|" and not self.brace_stacks["()"] and not self.brace_stacks["[]"] and not self.brace_stacks["{}"]:
+                if not self.pipe_stack:
+                    # 外层 | 入栈
+                    self.pipe_stack.append(i)
+                else:
+                    # 匹配到外层 |，替换为 \abs()
+                    start = self.pipe_stack.pop()
+                    content = "".join(chars[start+1:i])
+                    # 递归处理内部可能存在的嵌套绝对值
+                    content = self.process(content)  # 关键点：递归处理
+                    # 替换起始 | 和结束 | 之间的内容
+                    output.append("\\abs(")
+                    output.extend(list(content))
+                    output.append(")")
+                    i += 1  # 跳过原结束 |
+                    continue
+            if not self.pipe_stack:# 如果绝对值栈为空，才添加原字符
+                output.append(c)
+            i += 1
+        return "".join(output)
 def _setup_operators(string: str):
     """字符处理切割为运算块（严格保持分割逻辑，修复减号分割问题）"""
     # 第零步：预处理非法字符和绝对值替换
@@ -21,10 +73,7 @@ def _setup_operators(string: str):
     if len(pipe_indices) % 2 != 0:
         raise ValueError("invalid absolute expression")
     if pipe_indices:
-        for i in reversed(range(0, len(pipe_indices), 2)):
-            start, end = pipe_indices[i], pipe_indices[i+1]
-            content = string[start+1:end]
-            string = f"{string[:start]}\\abs({content}){string[end+1:]}"
+        string = AbsProcessor().process(string)
     
     # 第一步：基于括号栈的运算符分割（严格保持原始逻辑）
     Parentheses_stack = []
@@ -122,7 +171,7 @@ def _setup_special(string: str):
                     elif i+5 < len(string) and string[i:i+5] == r'\times':
                         if operator_replacements[-1] != '\times':#2.2如果前一个运算符是乘号，则替换为叉乘
                             operator_replacements.append('\times')#识别为叉乘
-                        else:pass#不增加叉乘符号
+                        else:pass#不增加叉乘符号 
                         i += 6
                         continue
                     start_index = find_start_position(string, i)#找第一个任意括号，分割运算符函数
@@ -133,10 +182,10 @@ def _setup_special(string: str):
                                 end_index = find_matching_braces(string, i + 5, '{}')#找第一个括号对应的}位置
                                 if end_index != -1 and string[end_index + 1] == '{':#找分式的第二个括号{}，如果没有，立刻报错
                                     operator_replacements.append(string[i+6:end_index-1])#识别分子
-                                    end_index2 = find_matching_braces(string, end_index + 1, '{}')#找第二个括号对应的}位置,如果没有，立刻报错
+                                    end_index2 = find_matching_braces(string, end_index, '{}')#找第二个括号对应的}位置,如果没有，立刻报错
                                     if end_index2 != -1:
                                         operator_replacements.append(string[end_index+2:end_index2-1])#识别分母
-                                        i = end_index + 1#跳过原本分式结构
+                                        i = end_index2 + 1#跳过原本分式结构
                                         if i < len(string):#如果不是运算块末尾
                                             operator_replacements.append(r'\times')#添加乘法标识
                                         continue
@@ -510,7 +559,7 @@ def _setup_special(string: str):
                                 if i+2 < len(string):#如果不是末尾
                                     if string[i+2] == '{':#非单字符上标
                                         end_up_index = find_matching_braces(string, i + 2, '{}')#找上标对应的}位置
-                                        power_string = string[i+3:end_index-1]#切出上标 
+                                        power_string = string[i+3:end_index]#切出上标 
                                     else:#单字符上标
                                         end_up_index = i + 2
                                         power_string = string[i+2]#切出上标
@@ -617,7 +666,7 @@ def find_matching_braces(s, start, brace_type='{}'):
                 return -1  # 提前发现不匹配
             stack.pop()
             if not stack:
-                return i
+                return i+1
     return -1  # 明确返回-1表示未找到
 
 def find_start_position(string, start_index):
@@ -647,44 +696,85 @@ def find_character_position(string: str, target: str, start_index=0):
             return i
     return -1
 
+import time
+import threading
+
+class TimeoutError(Exception):
+    """自定义异常，用于处理超时情况"""
+    pass
+
+def _setup_special_with_timeout(string: str, timeout: float = 1.0):
+    """带超时功能的 _setup_special 函数"""
+    result = [None]  # 用于存储结果
+    error = [None]   # 用于存储异常
+
+    def target():
+        try:
+            result[0] = _setup_special(string)
+        except Exception as e:
+            error[0] = e
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join(timeout)
+
+    if thread.is_alive():
+        thread.join()  # 确保线程结束
+        raise TimeoutError("处理时间超过1秒，可能进入死循环")
+    
+    if error[0]:
+        raise error[0]
+    
+    return result[0]
+
 if __name__ == '__main__':
-    from latextest import _setup_operators
 
     expressions = [
-    r"|2 + 3| + (4 - 5) * [6 / {7 + 8}]",
-    r"\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|}",
-    r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d|} |\sin(x)| dx",
-    r"\sum_{|i|=1}^{|n|} |i^2| + \prod_{|j|=1}^{|m|} |j|",
-    r"\sqrt[|3|]{|x|} + \sqrt{|y|} + \sqrt[|4|]{|z|}",
-    r"\ln(|2|) + \log_{|2|}(|8|) + \exp(|1|)",
-    r"\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|} #",
-    r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d|} |\sin(x)| dx #",
-    r"\frac{(|a - b| + (|c + d|))}{(|e - f|)} - \sqrt{(|g|)}",
-    r"\int_{(|a|)}^{(|b|)} (|x|) dx + \int_{(|c|)}^{(|d|)} (|\sin(x)|) dx",
-    r"(2 + 3) + (4 - 5 * [6 / {7 + 8)",  # 括号不匹配
-    r"\frac{|a - b| + |c + d|}{|e - f} - \sqrt{|g|}",  # 括号不匹配
-    r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d| |\sin(x)| dx",  # 括号不匹配
-    r"\sum_{|i|=1}^{|n| |i^2| + \prod_{|j|=1}^{|m|} |j|",  # 括号不匹配
-    r"\sqrt[|3|]{|x| + \sqrt{|y|} + \sqrt[|4|]{|z|",  # 括号不匹配
-    r"\ln(|2| + \log_{|2|}(|8| + \exp(|1|",  # 括号不匹配
-    r"-2 + 3 - (4 - 5) * [6 / {7 + 8}]",  # 包含负号
-    r"\frac{-|a - b| + |c + d|}{|e - f|} - \sqrt{-|g|}",  # 包含负号
-    r"\int_{-|a|}^{|b|} {-|x| dx} + \int_{|c|}^{-|d|} {|\sin(-x)| dx}",  # 包含负号
-    r"\sum_{-|i|=1}^{|n|} -|i^2| + \prod_{|j|=1}^{-|m|} |j|",  # 包含负号
-    r"\sqrt[|-3|]{-|x|} + \sqrt{-|y|} + \sqrt[|4|]{-|z|}",  # 包含负号
-    r"\ln(-|2|) + \log_{-|2|}(|8|) + \exp(-|1|)",  # 包含负号
-    r"|(|x| + |y|)| - \frac{\abs{\ln(2)}}{3} = 0", 
-    r"1E-5 + (x + y",
-    r"\frac{\sum_{i=1}^n{i^2}}{2} - \sqrt[3]{-\abs{5}} = \alpha_{0}",
-    r"\sum_{k=1}^\infty{\frac{k}{2^k}",
-    r"1E-5 + (x - y) - -1E-5 + (x + y)",
-]
+        r'x_{i}',
+        r'\frac{1}{2}',
+        r'(4-5)\times(6/(7+8))',
+        r"\frac{a+b}{c-d}",
+        r"\sqrt{x+y}",
+        r"\sqrt[3]{x^2+y^2}",
+        r"\int_{a}^{b}f(x)dx",
+        r"\intg(x)dx",
+        r"\sum_{i=1}^{n}{i^2}",
+        r"\log_{2}(8)",
+        r"\ln(2)",
+        r"\lim_{x\to\infty}f(x)",
+        r"\limsup_{n\to\infty}f(n)",
+        r"\liminf_{n\to\infty}f(n)",
+        r"\sin(x)",
+        r"\cos(x)",
+        r"\tan(x)",
+        r"\sec(x)",
+        r"\csc(x)",
+        r"\cot(x)",
+        r"\FACT(120)",
+        r"\abs(\sin(x)) + \abs(x - y)",
+        r"C_5^2", r"P_6^3", r"A_7^4",
+        r"x_i^2",
+        r"y_j^3",
+        r"z_k^4",
+        r"1E-5",
+        r"50%",
+        r"\frac{a + b c - d}",  # 缺少右括号
+        r"\sqrt[3 x]{}",        # 根式幂次后缺少表达式
+        r"\int_a^b",            # 积分表达式缺失
+        r"\sum_{i=1}^{n"       # 累加上限缺失右括号
+    ]
 
     for expr in expressions:
         try:
-            result = _setup_operators(expr)
+            result = _setup_special_with_timeout(expr)
             print(f"Expression: {expr}")
             print(f"Results: {result}\n")
-        except ValueError as e:
+        except TimeoutError as te:
             print(f"Expression: {expr}")
-            print(f"Error: {e}\n")
+            print(f"Error: {te}\n")
+        except ValueError as ve:
+            print(f"Expression: {expr}")
+            print(f"Error: {ve}\n")
+        except Exception as e:
+            print(f"Expression: {expr}")
+            print(f"Unexpected Error: {e}\n")
