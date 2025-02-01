@@ -7,7 +7,7 @@ GH_letters = [r'\alpha',r'\beta',r'\chi',r'\delta',r'\epsilon',r'\eta',r'\gamma'
 special_operators = [r'\frac',r'\sqrt',r'\int',r'\sum',r'\prod',r'\log',r'\lim',r'\limsup',r'\liminf',r'\sin',r'\cos',r'\tan',
                     r'\sec',r'\csc',r'\cot',r'\sinh',r'\cosh',r'\tanh',r'\arcsin',r'\arccos',r'\arctan',r'\exp',r'\ln',r'\lg',
                     r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr']
-operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot']
+operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot',r'^']
 
 class AbsProcessor:
     def __init__(self):
@@ -21,24 +21,25 @@ class AbsProcessor:
         while i < len(chars):
             c = chars[i]
             # 更新括号栈状态
-            if c == "(":
-                self.brace_stacks["()"] += 1
-            elif c == ")":
-                if self.brace_stacks["()"] == 0:
-                    raise ValueError("Mismatched parentheses")
-                self.brace_stacks["()"] -= 1
-            elif c == "[":
-                self.brace_stacks["[]"] += 1
-            elif c == "]":
-                if self.brace_stacks["[]"] == 0:
-                    raise ValueError("Mismatched brackets")
-                self.brace_stacks["[]"] -= 1
-            elif c == "{":
-                self.brace_stacks["{}"] += 1
-            elif c == "}":
-                if self.brace_stacks["{}"] == 0:
-                    raise ValueError("Mismatched braces")
-                self.brace_stacks["{}"] -= 1
+            match c:
+                case "(":
+                    self.brace_stacks["()"] += 1
+                case ")":
+                    if self.brace_stacks["()"] == 0:
+                        raise ValueError("Mismatched parentheses")
+                    self.brace_stacks["()"] -= 1
+                case "[":
+                    self.brace_stacks["[]"] += 1
+                case "]":
+                    if self.brace_stacks["[]"] == 0:
+                        raise ValueError("Mismatched brackets")
+                    self.brace_stacks["[]"] -= 1
+                case "{":
+                    self.brace_stacks["{}"] += 1
+                case "}":
+                    if self.brace_stacks["{}"] == 0:
+                        raise ValueError("Mismatched braces")
+                    self.brace_stacks["{}"] -= 1
             
             # 处理绝对值符号 |（仅在括号栈为0时允许匹配）
             if c == "|" and not self.brace_stacks["()"] and not self.brace_stacks["[]"] and not self.brace_stacks["{}"]:
@@ -83,24 +84,25 @@ def _setup_operators(string: str):
 
     for index, char in enumerate(string):
         # 括号栈更新（保持原始逻辑）
-        if char == '(':
-            Parentheses_stack.append(char)
-        elif char == ')':
-            if not Parentheses_stack:
-                raise ValueError("Mismatched parentheses")
-            Parentheses_stack.pop()
-        elif char == '[':
-            Square_brackets_stack.append(char)
-        elif char == ']':
-            if not Square_brackets_stack:
-                raise ValueError("Mismatched brackets")
-            Square_brackets_stack.pop()
-        elif char == '{':
-            Braces_stack.append(char)
-        elif char == '}':
-            if not Braces_stack:
-                raise ValueError("Mismatched braces")
-            Braces_stack.pop()
+        match char:
+            case '(':
+                Parentheses_stack.append(char)
+            case ')':
+                if not Parentheses_stack:
+                    raise ValueError("Mismatched parentheses")
+                Parentheses_stack.pop()
+            case '[':
+                Square_brackets_stack.append(char)
+            case ']':
+                if not Square_brackets_stack:
+                    raise ValueError("Mismatched brackets")
+                Square_brackets_stack.pop()
+            case '{':
+                Braces_stack.append(char)
+            case '}':
+                if not Braces_stack:
+                    raise ValueError("Mismatched braces")
+                Braces_stack.pop()
 
         # 运算符分割逻辑（关键修复点）
         if not Parentheses_stack and not Square_brackets_stack and not Braces_stack:
@@ -591,7 +593,7 @@ import re
 
 # 预编译科学计数法正则（支持 .5e7 和 1E3 等格式）
 SCIENTIFIC_NOTATION_REGEX = re.compile(
-    r'^[+-]?(?:\d+\.?\d*|\.\d+)(?:[Ee][+-]?\d+)?$'  # 允许纯数字（如 123）和科学计数法
+    r'^[+-]?(?:\d+\.?\d*|\.\d+)(?:[E][+-]?\d+)?$'  # 允许纯数字（如 123）和科学计数法
 )
 
 def is_final_list(operator: list):
@@ -601,25 +603,34 @@ def is_final_list(operator: list):
         if item == '':  # 空字符跳过
             continue
         
-        # 1. 校验数字（含科学计数法）
+        # 1. 校验列表
+        if isinstance(item, list):  # 检查是否为列表
+            result, error_item = is_final_list(item)  # 递归调用
+            if not result:
+                return False, item
+            continue
+        
+        # 2. 校验数字（含科学计数法）
         if isinstance(item, str) and SCIENTIFIC_NOTATION_REGEX.match(item):
             continue
         
-        # 2. 校验运算符/希腊字母
-        if item in allowed_prefixes:
+        # 3. 校验运算符/希腊字母/单英文字符
+        if item in allowed_prefixes or (len(item) == 1 and item.isalpha()):
             continue
         
-        # 3. 校验带下标的变量（如 x_{i} 或 \alpha_{0}）
+        # 4. 校验带下标的变量（如 x_{i} 或 \alpha_{0}）
         if '_' in item:
             parts = item.split('_', 1)
             prefix, subscript = parts[0], parts[1]
             # 允许希腊字母或普通字母作为前缀
-            if (prefix in allowed_prefixes or prefix.isalpha()) and subscript.startswith('{'):
+            if (prefix in GH_letters or prefix.isalpha()) and subscript.startswith('{'):
                 end = find_matching_braces(item, item.index('{'), '{}')
-                if end != -1 and item[end] == '}':
+                if end != -1 and item[end - 1] == '}' and end == len(item):
                     continue
+            elif (prefix in GH_letters or prefix.isalpha()) and len(subscript) == 1:
+                continue
         
-        # 4. 非法字符判定
+        # 5. 非法字符判定
         return False, item
     
     return True, ''
@@ -726,55 +737,32 @@ def _setup_special_with_timeout(string: str, timeout: float = 1.0):
         raise error[0]
     
     return result[0]
+# 测试函数
+def test_is_final_list():
+    for i, test_case in enumerate(test_cases):
+        result = is_final_list(test_case)
+        print(f"Test case {i+1}: {test_case} -> {result}")
 
 if __name__ == '__main__':
 
-    expressions = [
-        r'x_{i}',
-        r'\frac{1}{2}',
-        r'(4-5)\times(6/(7+8))',
-        r"\frac{a+b}{c-d}",
-        r"\sqrt{x+y}",
-        r"\sqrt[3]{x^2+y^2}",
-        r"\int_{a}^{b}f(x)dx",
-        r"\intg(x)dx",
-        r"\sum_{i=1}^{n}{i^2}",
-        r"\log_{2}(8)",
-        r"\ln(2)",
-        r"\lim_{x\to\infty}f(x)",
-        r"\limsup_{n\to\infty}f(n)",
-        r"\liminf_{n\to\infty}f(n)",
-        r"\sin(x)",
-        r"\cos(x)",
-        r"\tan(x)",
-        r"\sec(x)",
-        r"\csc(x)",
-        r"\cot(x)",
-        r"\FACT(120)",
-        r"\abs(\sin(x)) + \abs(x - y)",
-        r"C_5^2", r"P_6^3", r"A_7^4",
-        r"x_i^2",
-        r"y_j^3",
-        r"z_k^4",
-        r"1E-5",
-        r"50%",
-        r"\frac{a + b c - d}",  # 缺少右括号
-        r"\sqrt[3 x]{}",        # 根式幂次后缺少表达式
-        r"\int_a^b",            # 积分表达式缺失
-        r"\sum_{i=1}^{n"       # 累加上限缺失右括号
+    # 测试用例
+    test_cases = [
+    # 正常情况
+    ["123", "45.67", "1.23E10", "x", r"\alpha", "x_{i}", r"\alpha_{0}","e"],
+    # 空字符
+    ["", "123", "x"],
+    # 科学计数法
+    ["1.23E10", "4.56E-7"],
+    # 运算符和希腊字母
+    ["+", "-", r"\times", r"\div", r"\alpha", r"\beta"],
+    # 带下标的变量
+    ["x_{i}", r"\alpha_{0}", "y_{123}"],
+    # 非法字符
+    ["123", r"\times", "a", 'b','c',"x_{i}", "y_i", "z_{i}","i"],
+    # 混合情况
+    ["123", "x", "x_{i}", "4.56E-7", "+", "y_{123}", "1.23E10", "z_i"],
+    #列表情况
+    ["\int","0","1",["x","^","2x"],"x"]
     ]
-
-    for expr in expressions:
-        try:
-            result = _setup_special_with_timeout(expr)
-            print(f"Expression: {expr}")
-            print(f"Results: {result}\n")
-        except TimeoutError as te:
-            print(f"Expression: {expr}")
-            print(f"Error: {te}\n")
-        except ValueError as ve:
-            print(f"Expression: {expr}")
-            print(f"Error: {ve}\n")
-        except Exception as e:
-            print(f"Expression: {expr}")
-            print(f"Unexpected Error: {e}\n")
+    # 运行测试
+    test_is_final_list()
