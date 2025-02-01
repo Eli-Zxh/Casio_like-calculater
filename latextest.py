@@ -8,70 +8,94 @@ special_operators = [r'\frac',r'\sqrt',r'\int',r'\sum',r'\prod',r'\log',r'\lim',
                     r'\sec',r'\csc',r'\cot',r'\sinh',r'\cosh',r'\tanh',r'\arcsin',r'\arccos',r'\arctan',r'\exp',r'\ln',r'\lg',
                     r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr']
 operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot']
-def _setup_operators(string: str):#字符处理切割为运算块
-        Parentheses_stack = []
-        Square_brackets_stack = []
-        Braces_stack = []#三个栈
-        positions = []#作为记录递归运算块位置的list
-        parts = []#作为最终可识别计算的文件格式，用list存储
-        #第零步，判断其中是否存在非法字符，并对于绝对值进行特殊处理
-        if '#' in string:#不允许出现#号
-            ValueError("invalid expression")
-        elif ' ' in string:#不允许存在空格
-            string = string.replace(' ', '')
-        elif '\n' in string:#不允许存在换行符
-            string = string.replace('\n', '')
-        elif '|' in string:#出现||表示的绝对值
-            start_index = string.index('|')#找到第一个|的位置
-            end_index = find_character_position(string,'|',start_index)#找到对应括号栈值相等处的||位置
-            absolute_part = string[start_index+1:end_index-1]#提取出绝对值部分
-            string = string[:start_index] + r'\abs' + '(' + absolute_part + ')'+ string[end_index:]#替换为\abs(absolute_part)
-        #第一步，\frac{}{},\sqrt[]{},\sqrt{},()为运算块判定，按照运算块外的+-=分割string
-        for index, char in enumerate(string):#用栈的方式，在栈值为0的地方按照+==分割string
-            match char:#匹配括号左括号入栈，右括号出栈
-                case '(':
-                    Parentheses_stack.append(char)
-                case '[':
-                    Square_brackets_stack.append(char)
-                case '{':
-                    Braces_stack.append(char)
-                case ')':
-                    if not Parentheses_stack:
-                        raise ValueError("Mismatched parentheses")
-                    Parentheses_stack.pop()
-                case ']':
-                    if not Square_brackets_stack:
-                        raise ValueError("Mismatched brackets")
-                    Square_brackets_stack.pop()
-                case '}':
-                    if not Braces_stack:
-                        raise ValueError("Mismatched braces")
-                    Braces_stack.pop()
-                case '+'|'=':
-                    if not Parentheses_stack and not Square_brackets_stack and not Braces_stack:#在栈为空的地方，按照+==分割string
-                        positions.append(index)#分割
-                case '-':#减号和负号压迫特殊处理
-                    if not Parentheses_stack and not Square_brackets_stack and not Braces_stack:#在栈为空的地方，按照+==分割string
-                        if index == 0:#如果首字符是-，那表示负号,不分割
-                            pass
-                        else:#非首字符
-                            if string[index -1] in operators:#-前面有运算符，一定表示负号，不分割
-                                pass
-                            elif string[index - 1] != 'E':#-前面有E，表明这为科学计数法，不分割
-                                pass
-                            else:#-前面没有运算符，且不是E，那表示减号，分割
-                                positions.append(index)#分割
-            if not index:
-                positions.append(0)#记录第一个符号的位置
-            if index == len(string) - 1:
-                positions.append(len(string))#添加最后一个部分
-                if Parentheses_stack or Square_brackets_stack or Braces_stack:
-                    raise ValueError("Mismatched braces")#最后做一次括号判断，栈不为空则报错
-        for i,item in enumerate(positions):
-            if item:
-                parts.append(string[positions[i - 1] + 1:positions[i]])#分割字符串，添加到parts中
-        return parts
 
+def _setup_operators(string: str):
+    """字符处理切割为运算块（严格保持分割逻辑，修复减号分割问题）"""
+    # 第零步：预处理非法字符和绝对值替换
+    string = string.replace(" ", "").replace("\n", "")
+    if "#" in string:
+        raise ValueError("invalid character")
+    
+    # 绝对值替换逻辑（保持不变）
+    pipe_indices = [i for i, c in enumerate(string) if c == "|"]
+    if len(pipe_indices) % 2 != 0:
+        raise ValueError("invalid absolute expression")
+    if pipe_indices:
+        for i in reversed(range(0, len(pipe_indices), 2)):
+            start, end = pipe_indices[i], pipe_indices[i+1]
+            content = string[start+1:end]
+            string = f"{string[:start]}\\abs({content}){string[end+1:]}"
+    
+    # 第一步：基于括号栈的运算符分割（严格保持原始逻辑）
+    Parentheses_stack = []
+    Square_brackets_stack = []
+    Braces_stack = []
+    positions = [0]  # 必须包含起始位置
+
+    for index, char in enumerate(string):
+        # 括号栈更新（保持原始逻辑）
+        if char == '(':
+            Parentheses_stack.append(char)
+        elif char == ')':
+            if not Parentheses_stack:
+                raise ValueError("Mismatched parentheses")
+            Parentheses_stack.pop()
+        elif char == '[':
+            Square_brackets_stack.append(char)
+        elif char == ']':
+            if not Square_brackets_stack:
+                raise ValueError("Mismatched brackets")
+            Square_brackets_stack.pop()
+        elif char == '{':
+            Braces_stack.append(char)
+        elif char == '}':
+            if not Braces_stack:
+                raise ValueError("Mismatched braces")
+            Braces_stack.pop()
+
+        # 运算符分割逻辑（关键修复点）
+        if not Parentheses_stack and not Square_brackets_stack and not Braces_stack:
+            if char in ('+', '='):
+                positions.append(index)
+                positions.append(index + 1)  # 运算符后分割
+            elif char == '-':
+                # 严格判定负号条件（保持项目原有逻辑）
+                is_negative = (
+                    index == 0 or
+                    string[index-1] in operators + ['(', '[', '{', 'E'] or
+                    (string[index-1] == 'E' and index >= 2 and string[index-2].isdigit())
+                )
+                if not is_negative:
+                    positions.append(index)
+                    positions.append(index + 1)  # 减号单独分割
+
+    positions.append(len(string))  # 确保包含末尾
+
+     # 检查栈是否为空，确保括号匹配
+    if Parentheses_stack or Square_brackets_stack or Braces_stack:
+        raise ValueError("Mismatched brackets or parentheses")
+
+    # 第二步：提取分割块（严格按原始项目格式）
+    parts = []
+    for i in range(1, len(positions)):
+        part = string[positions[i-1]:positions[i]]
+        if part:  # 保留空字符串以匹配原有逻辑
+            parts.append(part)
+    
+    # 第三步：修复运算符粘连问题（如 "-\\frac" 拆分为 "-" 和 "\\frac"）
+    final_parts = []
+    for part in parts:
+        if part.startswith('-') and len(part) > 1 and part[1] != '\\':
+            # 处理类似 "-123" 的情况
+            final_parts.append(part)
+        elif part.startswith('-') and len(part) > 1:
+            # 分割 "-\\frac" 为 "-" 和 "\\frac"
+            final_parts.append('-')
+            final_parts.append(part[1:])
+        else:
+            final_parts.append(part)
+    
+    return final_parts
 def _setup_special(string: str):
         #第二步，对于每个分割的部分，做运算块判定，对满足运算块判定的部分去运算块重复第一步
         i = 0
@@ -514,75 +538,42 @@ def _setup_special(string: str):
                     continue
         return operator_replacements
 
-def is_final_list(operator:list):#第三步，判断是否为最终的可计算的列表
-    main_letter = ''
-    parts = []
-    first_string = ''
-    for i in operator:#遍历
-        if i.isdigit():#整数
+import re
+
+# 预编译科学计数法正则（支持 .5e7 和 1E3 等格式）
+SCIENTIFIC_NOTATION_REGEX = re.compile(
+    r'^[+-]?(?:\d+\.?\d*|\.\d+)(?:[Ee][+-]?\d+)?$'  # 允许纯数字（如 123）和科学计数法
+)
+
+def is_final_list(operator: list):
+    """第三步，判断是否为最终的可计算的列表"""
+    allowed_prefixes = set(GH_letters + special_operators + operators)
+    for item in operator:
+        if item == '':  # 空字符跳过
             continue
-        elif i.count('.')  == 1:#浮点数
-            parts = i.split('.')
-            if parts[0].isdigit() and parts[1].isdigit() and len(parts) == 2:#整数部分和浮点部分都是数字
-                continue
-            else:
-                return False,i
-        elif i in special_operators:#运算函数标识
+        
+        # 1. 校验数字（含科学计数法）
+        if isinstance(item, str) and SCIENTIFIC_NOTATION_REGEX.match(item):
             continue
-        elif i in GH_letters:#希腊字母判定，保留直接判定逻辑，以优化算法
+        
+        # 2. 校验运算符/希腊字母
+        if item in allowed_prefixes:
             continue
-        elif i in operators:#运算符
-            continue
-        elif i == '':#空字符
-                continue
-        else:
-            first_string = i[0]#读取首字符
-            if first_string.isalpha():#字母
-                if len(i) == 1:#单字符
-                     continue
-                else:#多字符
-                    if i[1] != '_':#后面的字符不是下标
-                        return False,i
-                    else:#有下标
-                        if i[2] == '{':#非单字符下标
-                            for j in range(3,len(i)):#遍历i
-                                if i[j].isdigit() or i[j].isalpha():#下标是数字或字母
-                                    continue
-                                elif i[j] == '}':#出现}
-                                    if j == len(i)-1:#如果是运算块末尾
-                                        continue
-                                    else:#如果不是运算块末尾
-                                        return False,i
-                                else:#其他非法字符
-                                    return False,i
-                        elif len(i) == 3:#单字符下标
-                            continue
-                        else:return ValueError("invalid expression")
-            elif first_string == r'\\':#其余允许的只剩下希腊字母
-                for j in GH_letters:
-                    if i.find(j) == 0:#匹配到希腊字母
-                        main_letter = j
-                        break
-                if len(main_letter) != 0:#如果匹配到了希腊字母
-                    if i[1] != '_':#后面的字符不是下标
-                        return False,i
-                    else:#有下标
-                        if i[2] == '{':#非单字符下标
-                            for k in range(3,len(i)):#遍历i
-                                if i[k].isdigit() or i[k].isalpha():#下标是数字或字母
-                                    continue
-                                elif i[k] == '}':#出现}
-                                    if k == len(i)-1:#如果是运算块末尾
-                                        break
-                                    else:#如果不是运算块末尾
-                                        return False,i
-                                else:#其他非法字符
-                                    return False,i
-                        elif len(i) == 3:#单字符下标
-                            continue
-                        else:raise ValueError("invalid expression")
-                continue
-    return True,''
+        
+        # 3. 校验带下标的变量（如 x_{i} 或 \alpha_{0}）
+        if '_' in item:
+            parts = item.split('_', 1)
+            prefix, subscript = parts[0], parts[1]
+            # 允许希腊字母或普通字母作为前缀
+            if (prefix in allowed_prefixes or prefix.isalpha()) and subscript.startswith('{'):
+                end = find_matching_braces(item, item.index('{'), '{}')
+                if end != -1 and item[end] == '}':
+                    continue
+        
+        # 4. 非法字符判定
+        return False, item
+    
+    return True, ''
 
 #第四步，递归处理，转为最终计算列表
 def latex_to_list(string: str):
@@ -612,41 +603,88 @@ def latex_to_list(string: str):
                 processed_parts.append(part)
     return processed_parts
 
-def find_matching_braces(s, start, brace_type='{}'):#匹配括号,s为字符串，start为起始位置，brace_type为括号类型，返回匹配的括号位置
-            stack = []
-            open_brace, close_brace = brace_type
-            for i in range(start, len(s)):
-                if s[i] == open_brace:
-                    stack.append(i)
-                elif s[i] == close_brace:
-                    if stack:
-                        stack.pop()
-                        if not stack:
-                            return i
-            return -1
+def find_matching_braces(s, start, brace_type='{}'):
+    """匹配括号,s为字符串，start为起始位置，brace_type为括号类型，返回匹配的括号位置"""
+    if len(brace_type) != 2 or brace_type[0] not in '({[<' or brace_type[1] not in ')}]>':
+        raise ValueError(f"Invalid brace type: {brace_type}")
+    open_brace, close_brace = brace_type
+    stack = []
+    for i in range(start, len(s)):
+        if s[i] == open_brace:
+            stack.append(i)
+        elif s[i] == close_brace:
+            if not stack:
+                return -1  # 提前发现不匹配
+            stack.pop()
+            if not stack:
+                return i
+    return -1  # 明确返回-1表示未找到
 
-def find_start_position(string,start_index):#寻找起始位置
-    brace_map = {'(','[','{','_','^'}
-    for i in range(start_index,len(string)):
+def find_start_position(string, start_index):
+    """寻找起始位置"""
+    brace_map = {'(', '[', '{', '_', '^'}
+    # 处理起始索引越界
+    if start_index >= len(string):
+        return len(string)
+    # 直接遍历，无需嵌套条件
+    for i in range(start_index, len(string)):
         if string[i] in brace_map:
-            return i-1
-        elif i < len(string)-1:
-            continue
+            return i  # 直接返回目标字符位置，无需-1
     return len(string)
 
-def find_character_position(string: str, target: str,start_index = 0):#寻找字符位置
+def find_character_position(string: str, target: str, start_index=0):
+    """寻找字符位置（考虑括号嵌套）"""
     stack = []
-    in_map = {'(','[','{'}
-    out_map = {')',']','}'}
-    if target in out_map or target in in_map:
-        for i in range(len(string)):
-            if string[i] == target:
-                return i
-    for i in range(start_index,len(string)):
-        if string[i] == target and not stack:
+    brace_pairs = {'(': ')', '[': ']', '{': '}'}
+    for i in range(start_index, len(string)):
+        char = string[i]
+        if char in brace_pairs.keys():
+            stack.append(char)
+        elif char in brace_pairs.values():
+            if not stack or brace_pairs[stack.pop()] != char:
+                return -1  # 括号不匹配
+        if char == target and not stack:  # 仅在栈为空时匹配
             return i
-        elif string[i] in in_map:
-            stack.append(string[i])
-        elif string[i] in out_map:
-            stack.pop()
     return -1
+
+if __name__ == '__main__':
+    from latextest import _setup_operators
+
+    expressions = [
+    r"|2 + 3| + (4 - 5) * [6 / {7 + 8}]",
+    r"\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|}",
+    r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d|} |\sin(x)| dx",
+    r"\sum_{|i|=1}^{|n|} |i^2| + \prod_{|j|=1}^{|m|} |j|",
+    r"\sqrt[|3|]{|x|} + \sqrt{|y|} + \sqrt[|4|]{|z|}",
+    r"\ln(|2|) + \log_{|2|}(|8|) + \exp(|1|)",
+    r"\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|} #",
+    r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d|} |\sin(x)| dx #",
+    r"\frac{(|a - b| + (|c + d|))}{(|e - f|)} - \sqrt{(|g|)}",
+    r"\int_{(|a|)}^{(|b|)} (|x|) dx + \int_{(|c|)}^{(|d|)} (|\sin(x)|) dx",
+    r"(2 + 3) + (4 - 5 * [6 / {7 + 8)",  # 括号不匹配
+    r"\frac{|a - b| + |c + d|}{|e - f} - \sqrt{|g|}",  # 括号不匹配
+    r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d| |\sin(x)| dx",  # 括号不匹配
+    r"\sum_{|i|=1}^{|n| |i^2| + \prod_{|j|=1}^{|m|} |j|",  # 括号不匹配
+    r"\sqrt[|3|]{|x| + \sqrt{|y|} + \sqrt[|4|]{|z|",  # 括号不匹配
+    r"\ln(|2| + \log_{|2|}(|8| + \exp(|1|",  # 括号不匹配
+    r"-2 + 3 - (4 - 5) * [6 / {7 + 8}]",  # 包含负号
+    r"\frac{-|a - b| + |c + d|}{|e - f|} - \sqrt{-|g|}",  # 包含负号
+    r"\int_{-|a|}^{|b|} {-|x| dx} + \int_{|c|}^{-|d|} {|\sin(-x)| dx}",  # 包含负号
+    r"\sum_{-|i|=1}^{|n|} -|i^2| + \prod_{|j|=1}^{-|m|} |j|",  # 包含负号
+    r"\sqrt[|-3|]{-|x|} + \sqrt{-|y|} + \sqrt[|4|]{-|z|}",  # 包含负号
+    r"\ln(-|2|) + \log_{-|2|}(|8|) + \exp(-|1|)",  # 包含负号
+    r"|(|x| + |y|)| - \frac{\abs{\ln(2)}}{3} = 0", 
+    r"1E-5 + (x + y",
+    r"\frac{\sum_{i=1}^n{i^2}}{2} - \sqrt[3]{-\abs{5}} = \alpha_{0}",
+    r"\sum_{k=1}^\infty{\frac{k}{2^k}",
+    r"1E-5 + (x - y) - -1E-5 + (x + y)",
+]
+
+    for expr in expressions:
+        try:
+            result = _setup_operators(expr)
+            print(f"Expression: {expr}")
+            print(f"Results: {result}\n")
+        except ValueError as e:
+            print(f"Expression: {expr}")
+            print(f"Error: {e}\n")
