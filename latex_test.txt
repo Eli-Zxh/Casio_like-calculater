@@ -4,3 +4,68 @@
 \lim_{x\rightarrow0}{\lim_{y\rightarrow0}{\frac{xy}{x^2+y^2}}}
 \lim_{y\rightarrow0}{\frac{xy}{x^2+y^2}}
 \lim_{x\rightarrow\lim_{y\rightarrow0}{\frac{y}{1+y^2}}}{\frac{\sin(x)}{x}}
+
+r"|2 + 3| + (4 - 5) * [6 / {7 + 8}]",
+r"\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|}",
+r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d|} |\sin(x)| dx",
+r"\sum_{|i|=1}^{|n|} |i^2| + \prod_{|j|=1}^{|m|} |j|",
+r"\sqrt[|3|]{|x|} + \sqrt{|y|} + \sqrt[|4|]{|z|}",
+r"\ln(|2|) + \log_{|2|}(|8|) + \exp(|1|)",
+r"\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|} #",
+r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d|} |\sin(x)| dx #",
+r"\frac{(|a - b| + (|c + d|))}{(|e - f|)} - \sqrt{(|g|)}",
+r"\int_{(|a|)}^{(|b|)} (|x|) dx + \int_{(|c|)}^{(|d|)} (|\sin(x)|) dx",
+
+r"(2 + 3) + (4 - 5 * [6 / {7 + 8)",  # 括号不匹配
+r"\frac{|a - b| + |c + d|}{|e - f} - \sqrt{|g|}",  # 括号不匹配
+r"\int_{|a|}^{|b|} |x| dx + \int_{|c|}^{|d| |\sin(x)| dx",  # 括号不匹配
+r"\sum_{|i|=1}^{|n| |i^2| + \prod_{|j|=1}^{|m|} |j|",  # 括号不匹配
+r"\sqrt[|3|]{|x| + \sqrt{|y|} + \sqrt[|4|]{|z|",  # 括号不匹配
+r"\ln(|2| + \log_{|2|}(|8| + \exp(|1|",  # 括号不匹配
+r"-2 + 3 - (4 - 5) * [6 / {7 + 8}]",  # 包含负号
+r"\frac{-|a - b| + |c + d|}{|e - f|} - \sqrt{-|g|}",  # 包含负号
+r"\int_{-|a|}^{|b|} {-|x| dx} + \int_{|c|}^{-|d|} {|\sin(-x)| dx}",  # 包含负号
+r"\sum_{-|i|=1}^{|n|} -|i^2| + \prod_{|j|=1}^{-|m|} |j|",  # 包含负号
+r"\sqrt[|-3|]{-|x|} + \sqrt{-|y|} + \sqrt[|4|]{-|z|}",  # 包含负号
+r"\ln(-|2|) + \log_{-|2|}(|8|) + \exp(-|1|)",  # 包含负号
+r"|(|x| + |y|)| - \frac{\abs{\ln(2)}}{3} = 0", 
+r"1E-5 + (x + y",
+r"\frac{\sum_{i=1}^n{i^2}}{2} - \sqrt[3]{-\abs{5}} = \alpha_{0}",
+r"\sum_{k=1}^\infty{\frac{k}{2^k}",
+r"1E-5 + (x - y) - -1E-5 + (x + y)",
+
+r'x_{i}',
+r'\frac{1}{2}',
+r'(4-5)\times(6/(7+8))',
+r"\frac{a+b}{c-d}",
+r"\sqrt{x+y}",
+r"\sqrt[3]{x^2+y^2}",
+r"\int_{a}^{b}{f(x)dx}",
+r"\int{g(x)dx}",
+r"\sum_{i=1}^{n}{i^2}",
+r"\log_{2}(8)",
+r"\ln(2)",
+r"\lim_{x\rightarrow\infty}{f(x)}",
+r"\limsup_{n\rightarrow\infty}{f(n)}",
+r"\liminf_{n\rightarrow\infty}{f(n)}",
+r"\sin(x)",
+r"\cos(x)",
+r"\tan(x)",
+r"\sec(x)",
+r"\csc(x)",
+r"\cot(x)",
+r"\FACT(120)",
+r"\abs(\sin(x))\div\abs(x-y)",
+r"C_5^2", r"P_6^3", r"A_7^4",
+r"x_i^2",
+r"y_j^3",
+r"z_k^4",
+r"1E-5",
+r"50%",
+r"\frac{a + b c - d}",  # 缺少右括号
+r"\sqrt[3 x]{}",        # 根式幂次后缺少表达式
+r"\int_a^b",            # 积分表达式缺失
+r"\sum_{i=1}^{n" ,      # 累加上限缺失右括号
+r"\gcd(56x^2,48x)",
+r"\lim_{x\rightarrow\infty}{\frac{x}{\sin(x)}}",
+r"25!",

@@ -58,6 +58,27 @@ class AbsProcessor:
                     output.append(")")
                     i += 1  # 跳过原结束 |
                     continue
+            
+            # 处理括号内的绝对值符号
+            if c == "(" or c == "[" or c == "{":
+                # 找到匹配的括号结束位置
+                brace_type = c + {")": "(", "]": "[", "}": "{"}[c]
+                end_index = find_matching_braces(s, i, brace_type)
+                if end_index == -1:
+                    raise ValueError(f"Mismatched {brace_type}")
+                
+                # 递归处理括号内的内容
+                inner_content = s[i+1:end_index-1]
+                processed_inner_content = self.process(inner_content)
+                
+                # 添加处理后的括号内容
+                output.append(c)
+                output.extend(processed_inner_content)
+                output.append({")": "(", "]": "[", "}": "{"}[c])
+                
+                i = end_index  # 跳过已处理的括号内容
+                continue
+
             if not self.pipe_stack:# 如果绝对值栈为空，才添加原字符
                 output.append(c)
             i += 1
@@ -158,22 +179,22 @@ def _setup_special(string: str):
                     i += 1
                     continue
                 case '\\':
-                    if i+3 < len(string) and string[i:i+3] == r'\div':#2.1运算符不能按照find_start_position切开，给予单独判断
-                        if operator_replacements[-1] == '\times':#2.2如果前一个运算符是乘号，则替换为除号
-                            operator_replacements[-1] = '\div'#替换为除号
-                        else:operator_replacements.append('\div')#识别为除号
+                    if i+6 <= len(string) and string[i:i+4] == r'\div':#2.1运算符不能按照find_start_position切开，给予单独判断
+                        if operator_replacements[-1] == r'\times':#2.2如果前一个运算符是乘号，则替换为除号
+                            operator_replacements[-1] = r'\div'#替换为除号
+                        else:operator_replacements.append(r'\div')#识别为除号
                         i += 4
                         continue
-                    elif i+4 < len(string) and string[i:i+4] == r'\cdot':
-                        if operator_replacements[-1] == '\times':#2.2如果前一个运算符是乘号，则替换为点乘
-                            operator_replacements[-1] = '\cdot'#替换为点乘
-                        else:operator_replacements.append('\cdot')#识别为点乘
+                    elif i+6 < len(string) and string[i:i+5] == r'\cdot':
+                        if operator_replacements[-1] == r'\times':#2.2如果前一个运算符是乘号，则替换为点乘
+                            operator_replacements[-1] = r'\cdot'#替换为点乘
+                        else:operator_replacements.append(r'\cdot')#识别为点乘
                         i += 5
                         continue
-                    elif i+5 < len(string) and string[i:i+5] == r'\times':
-                        if operator_replacements[-1] != '\times':#2.2如果前一个运算符是乘号，则替换为叉乘
-                            operator_replacements.append('\times')#识别为叉乘
-                        else:pass#不增加叉乘符号 
+                    elif i+6 < len(string) and string[i:i+6] == r'\times':
+                        if operator_replacements[-1] != r'\times':#2.2如果前一个运算符是乘号，则替换为叉乘
+                            operator_replacements.append(r'\times')#识别为叉乘
+                        else:pass#否则不增加叉乘符号 
                         i += 6
                         continue
                     start_index = find_start_position(string, i)#找第一个任意括号，分割运算符函数
@@ -182,12 +203,13 @@ def _setup_special(string: str):
                             operator_replacements.append(r'\frac')#标识为分式
                             if string[i+5] == '{':#找第一个括号{}，如果没有，立刻报错
                                 end_index = find_matching_braces(string, i + 5, '{}')#找第一个括号对应的}位置
-                                if end_index != -1 and string[end_index + 1] == '{':#找分式的第二个括号{}，如果没有，立刻报错
+                                if end_index >= len(string):raise ValueError("invalid expression")#必须有第二个括号的补丁
+                                if end_index != -1 and string[end_index] == '{':#找分式的第二个括号{}，如果没有，立刻报错
                                     operator_replacements.append(string[i+6:end_index-1])#识别分子
                                     end_index2 = find_matching_braces(string, end_index, '{}')#找第二个括号对应的}位置,如果没有，立刻报错
                                     if end_index2 != -1:
-                                        operator_replacements.append(string[end_index+2:end_index2-1])#识别分母
-                                        i = end_index2 + 1#跳过原本分式结构
+                                        operator_replacements.append(string[end_index+1:end_index2-1])#识别分母
+                                        i = end_index2#跳过原本分式结构
                                         if i < len(string):#如果不是运算块末尾
                                             operator_replacements.append(r'\times')#添加乘法标识
                                         continue
@@ -201,16 +223,18 @@ def _setup_special(string: str):
                             operator_replacements.append(r'\sqrt')#标识为根式
                             match string[i+5]:
                                 case '[':#非二次根式
-                                    end_index = find_matching_braces(string, i + 5, '[]')#找根式幂次的]对应位置
-                                    if end_index != -1 and string[end_index + 1] == '{' and string[i+6,end_index-1].isdigit():#找根式幂次对应的括号，判断根式是否为数字，判断下一个字符为根式括号，如不满足立刻报错
-                                        operator_replacements.append(string[i+6:end_index-1])#识别根式幂次
-                                        end_index2 = find_matching_braces(string, end_index + 1, '{}')#找根式表达式括号}对应位置，如果没有，立刻报错
-                                        if end_index != -1:
-                                            operator_replacements.append(string[end_index + 2:end_index2-1])#识别根式
-                                            i = end_index + 1#跳过原本根式结构
-                                            if i < len(string):#如果不是运算块末尾
-                                                operator_replacements.append(r'\times')#添加乘法标识
-                                            continue
+                                    end_index = find_matching_braces(string, i + 4, '[]')#找根式幂次的]对应位置
+                                    if end_index != -1 and string[end_index] == '{':#找根式幂次对应的括号，判断下一个字符为根式括号，如不满足立刻报错
+                                        if (i+6 < end_index-2 and string[i+6:end_index-2].isdigit()) or (i+6 == end_index-2 and string[i+6].isdigit()):#判断根式是否为数字
+                                            operator_replacements.append(string[i+6:end_index-1])#识别根式幂次
+                                            end_index2 = find_matching_braces(string, end_index -1, '{}')#找根式表达式括号}对应位置，如果没有，立刻报错
+                                            if end_index2 != -1:
+                                                operator_replacements.append(string[end_index + 1:end_index2-1])#识别根式
+                                                i = end_index2#跳过原本根式结构
+                                                if i < len(string):#如果不是运算块末尾
+                                                    operator_replacements.append(r'\times')#添加乘法标识
+                                                continue
+                                            else: raise ValueError("invalid expression")
                                         else:
                                             raise ValueError("invalid expression")
                                     else: raise ValueError("invalid expression")
@@ -235,22 +259,25 @@ def _setup_special(string: str):
                                         down_end_index = find_matching_braces(int_string, down_index + 1, '{}')#找积分下限对应的括号
                                         operator_replacements.append(int_string[down_index + 2:down_end_index-1])#识别积分下限
                                     elif int_string[down_index + 1].isalpha() or int_string[down_index + 1].isdigit():#单字符识别
-                                        operator_replacements.append(int_string[down_index + 1])
+                                        down_end_index = down_index + 2#下限为单字符
+                                        operator_replacements.append(int_string[down_index])
                                     else: raise ValueError("invalid down limit")
                                     up_index = find_character_position(int_string,'^')#找积分上限
                                     if int_string[up_index + 1] == '{':#非单字符
                                         up_end_index = find_matching_braces(int_string, up_index + 1, '{}')#找积分上限对应的括号
-                                        operator_replacements.append(int_string[up_index + 2:up_end_index-1])#识别积分上限
+                                        operator_replacements.append(int_string[up_index + 2:up_end_index -1])#识别积分上限
                                     elif int_string[up_index + 1].isalpha() or int_string[up_index + 1].isdigit():#单字符识别
-                                        operator_replacements.append(int_string[up_index + 1])
+                                        up_end_index = up_index + 2
+                                        operator_replacements.append(int_string[up_index])
                                     else: raise ValueError("invalid up limit")
-                                    end_index = max(down_end_index,up_end_index)#取下限和上限的最大值
-                                    int_string = int_string[end_index+1:]
+                                    tag_index = max(down_end_index,up_end_index)#取下限和上限的最大值
+                                    int_string = int_string[tag_index:]
                                 case '{':#不定积分
                                     operator_replacements.append('')#下限传空
                                     operator_replacements.append('')#上限传空
                                     int_string = string[i+4:]#切开积分表达式
-                            expression_index = find_character_position(int_string,'{')#找积分表达式#不定积分与定积分处理表达式方式相同
+                                    tag_index = 0#下限和上限为空
+                            expression_index = find_character_position(int_string,'{')#找积分表达式，不定积分与定积分处理表达式方式相同
                             if expression_index != -1:
                                 end_index = find_matching_braces(int_string, expression_index, '{}')#找积分表达式的}对应位置
                                 int_string = int_string[expression_index+1:end_index-1]#切开表达式
@@ -259,10 +286,10 @@ def _setup_special(string: str):
                                     d_string = int_string[d_index+1:]#切开积分变量表达式
                                     if d_string[0] == '{' or d_string == '(':
                                         operator_replacements.append(d_string[1:-1])#去括号，识别积分变量
-                                    else:operator_replacements.append(int_string[d_index+1:])#识别积分变量
+                                    else:operator_replacements.append(int_string[d_index + 1:])#识别积分变量
                                 else: operator_replacements.append('x')#默认为x
-                                operator_replacements.append(int_string[:d_index - 1])#识别积分表达式
-                                i = end_index + 1#跳过原本积分结构
+                                operator_replacements.append(int_string[:d_index])#识别积分表达式
+                                i = end_index + 4 + tag_index#跳过原本积分结构
                                 if i < len(string):#如果不是运算块末尾
                                     operator_replacements.append(r'\times')#添加乘法标识
                             else: raise ValueError("invalid expression")#无表达式，立刻报错
@@ -273,11 +300,12 @@ def _setup_special(string: str):
                             if down_index != -1:
                                 if sum_string[down_index + 1] == '{':#非单字符
                                     down_end_index = find_matching_braces(sum_string, down_index + 1, '{}')#找下限对应的括号
+                                    if down_end_index == -1:raise ValueError("invalid down limit")#无对应的括号，立刻报错
                                     down_expression = sum_string[down_index + 2:down_end_index-1]#单列下限方程
                                     equal_index = find_character_position(down_expression,'=')#找等号
                                     if equal_index != -1:#定值求和
-                                        operator_replacements.append(down_expression[:equal_index-1])#识别求和变量
-                                        operator_replacements.append(sum_string[equal_index + 1:])#识别下限
+                                        operator_replacements.append(down_expression[:equal_index])#识别求和变量
+                                        operator_replacements.append(down_expression[equal_index + 1:])#识别下限
                                     else:
                                         operator_replacements.append(down_expression[down_index + 1:down_end_index-1])#识别求和变量
                                         is_variable = True
@@ -291,6 +319,7 @@ def _setup_special(string: str):
                             if up_index != -1:
                                 if sum_string[up_index + 1] == '{':#非单字符
                                     up_end_index = find_matching_braces(sum_string, up_index + 1, '{}')#找上限对应的括号
+                                    if up_end_index == -1: raise ValueError("invalid up limit")#不允许没有上限
                                     operator_replacements.append(sum_string[up_index + 2:up_end_index-1])#识别上限
                                 elif sum_string[up_index + 1].isalpha() or sum_string[up_index + 1].isdigit():#允许单字符
                                     operator_replacements.append(sum_string[up_index + 1])#识别上限
@@ -299,13 +328,13 @@ def _setup_special(string: str):
                                 if is_variable:operator_replacements.append('')#不定求和记为空
                                 else: raise ValueError("invalid up limit")
                             end_index = max(down_end_index,up_end_index)#取下限和上限的最大值
-                            sum_string = sum_string[end_index+1:]
+                            sum_string = sum_string[end_index:]
                             expression_index = find_character_position(sum_string,'{')#找表达式,不允许单字符
                             if expression_index != -1:
-                                end_index = find_matching_braces(sum_string, expression_index, '{}')#找表达式的}对应位置
-                                operator_replacements.append(sum_string[expression_index+1:end_index-1])#识别表达式
+                                expr_end_index = find_matching_braces(sum_string, expression_index, '{}')#找表达式的}对应位置
+                                operator_replacements.append(sum_string[expression_index+1:expr_end_index-1])#识别表达式
                             else: raise ValueError("invalid expression")#无表达式，立刻报错
-                            i = end_index + 1#跳过原本累加结构
+                            i = end_index + start_index + expr_end_index#跳过原本累加结构
                             if i < len(string):#如果不是运算块末尾
                                 operator_replacements.append('\times')#添加乘法标识
                         case r'\log':#普通对数函数
@@ -314,13 +343,13 @@ def _setup_special(string: str):
                             if down_index != -1:
                                 if string[down_index+1] == '{':#多字符
                                     end_index = find_matching_braces(string, down_index, '{}')#找到对应下标括号
-                                    operator_replacements.append(string[down_index+2:end_index])#识别底数
-                                else: operator_replacements.append(string[down_index+1])#单字符识别下标
+                                    operator_replacements.append(string[down_index+2:end_index - 1])#识别底数
+                                else: operator_replacements.append(string[down_index])#单字符识别下标
                             else: operator_replacements.append('10')#默认底为10
                             start_braces_index = find_character_position(string,'(')#找真数
                             if start_braces_index != -1:
                                 end_index = find_matching_braces(string,start_braces_index,'()')#找到对应括号
-                                operator_replacements.append(string[start_braces_index:end_index])#识别真数
+                                operator_replacements.append(string[start_braces_index+1:end_index-1])#识别真数
                             else: raise ValueError(f'invalid function log')
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
@@ -334,20 +363,21 @@ def _setup_special(string: str):
                                     down_expression = string[down_index + 2:down_end_index-1]#单列下限方程
                                     index = down_expression.find(r'\rightarrow')#不允许变量嵌套极限，找右箭头
                                     if index != -1:
-                                        operator_replacements.append(down_expression[:index-1])#识别变量
+                                        operator_replacements.append(down_expression[:index])#识别变量
                                         operator_replacements.append(down_expression[index+11:])#识别下限
                                     else: raise ValueError("invalid down limit")
-                                    lim_expression = string[down_end_index+1:]#切出表达式，直接切分
+                                    lim_expression = string[down_end_index:]#切出表达式，直接切分
                                     if lim_expression[0] == '{':
                                         end_index = find_matching_braces(lim_expression, 0, '{}')#找表达式的}对应位置
+                                        if end_index == -1: raise ValueError("invalid expression")#不允许没有表达式
                                         operator_replacements.append(lim_expression[1:end_index-1])#识别表达式
                                     else: raise ValueError("invalid expression")#无表达式，立刻报错
                                 else: raise ValueError("invalid down limit")
                             else: raise ValueError("invalid limit")#不允许没有极限下限
-                            i = end_index + 1#跳过原本函数结构
+                            i = end_index + down_end_index#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
                                 operator_replacements.append(r'\times')#添加乘法标识
-                        case r'\sin'|r'\cos'|r'\tan'|r'\sec'|r'\csc'|r'\cot'|r'\sinh'|r'\cosh'|r'\tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'\exp'|r'\ln'|r'\lg'|r'\arg'|r'\coth'|r'\deg':#所有三类函数
+                        case r'\sin'|r'\cos'|r'\tan'|r'\sec'|r'\csc'|r'\cot'|r'\sinh'|r'\cosh'|r'\tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'\exp'|r'\ln'|r'\lg'|r'\arg'|r'\coth'|r'\deg'|r'\factorial':#所有三类函数
                             func = string[i:start_index] 
                             operator_replacements.append(func)#添加第三类函数对应标识
                             if string[start_index + 1] == '^':#此种函数允许幂次前置
@@ -360,48 +390,54 @@ def _setup_special(string: str):
                             start_braces_index = find_character_position(string,'(')#找到第一个括号
                             if start_braces_index != -1:
                                 end_index = find_matching_braces(string,start_braces_index,'()')#找到对应括号
-                                operator_replacements.append(string[start_braces_index:end_index])#切开识别数字或函数
-                                if power_string:
-                                    operator_replacements.append('^')#添加幂次
-                                    operator_replacements.append(power_string)#识别上标
+                                operator_replacements.append(string[start_braces_index+1:end_index-1])#切开识别数字或函数
+                                try:
+                                    if power_string:
+                                        operator_replacements.append('^')#添加幂次
+                                        operator_replacements.append(power_string)#识别上标
+                                except:pass
                             else: raise ValueError(f'invalid function {func}')
                             i = end_index + 1#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
                                 operator_replacements.append(r'\times')#添加乘法标识
                         case r'\FACT':#分解质因子
                             operator_replacements.append(r'\FACT')#添加分解质因子标识
-                            if string(start_index+1) == '(':#如果是括号
+                            if string[start_index] == '(':#如果是括号
                                 end_index = find_matching_braces(string, start_index, '()')
-                                operator_replacements.append(string[start_index+1:end_index-1])#识别分解质因子表达式
+                                operator_replacements.append(string[start_index+1:end_index -1])#识别分解质因子表达式
+                                i = end_index
+                                if i < len(string):#如果不是运算块末尾
+                                    operator_replacements.append(r'\times')#添加乘法标识
+                            else: raise ValueError('invalid function FACT')
                         case r'\det':
                             raise ValueError("常规模式暂不支持行列式运算")
                         case r'\dim':
                             raise ValueError("常规模式暂不支持矩阵维度运算")
                         case r'\gcd':#最大公约数，辗转相除
                             operator_replacements.append(r'\gcd')#添加辗转相除函数标识
-                            gcd_string = string[start_index + 1:]
+                            gcd_string = string[start_index:]
                             start_braces_index = find_character_position(gcd_string,'(')#找到第一个括号
                             if start_braces_index != -1:
                                 end_index = find_matching_braces(gcd_string,start_braces_index,'()')#找到对应括号
                                 comma_index = gcd_string.find(',')#找逗号
-                                operator_replacements.append(gcd_string[start_braces_index+1:comma_index-1])#切出式子1
+                                operator_replacements.append(gcd_string[start_braces_index+1:comma_index])#切出式子1
                                 operator_replacements.append(gcd_string[comma_index+1:end_index-1])#切出式子2
                             else: raise ValueError("invalid func gcd")#无辗转相除式，立刻报错
-                            i = end_index + 1#跳过原本函数结构
+                            i = end_index + 4#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
                                 operator_replacements.append(r'\times')#添加乘法标识
                         case r'\hom':
                             raise ValueError("你觉得这个计算器能算范畴论吗？(恼)")
                         case r'\max'|r'\sup':#最大值
                             operator_replacements.append(r'\max')#添加最大值标识
-                            if string[start_index+1] == '{':
+                            if string[start_index] == '{':
                                 end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
                                 min_string = string[start_index + 2:end_index-1]#切出集合
                                 parts = min_string.split(',')#切出集合元素
                                 for part in parts:
                                     operator_replacements.append(part)#识别每个数字
                             else: raise ValueError("invalid number")#无表达式，立刻报错
-                            i = end_index + 1#跳过原本函数结构
+                            i = end_index#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
                                 operator_replacements.append(r'\times')#添加乘法标识
                         case r'\ker':
@@ -424,9 +460,12 @@ def _setup_special(string: str):
                             raise ValueError("请使用C,P,A上下标格式计算排列组合")
                         case r'\abs':
                             operator_replacements.append(r'\abs')#添加绝对值标识
-                            if string[start_index+1] == '(':#如果是括号
-                                end_index = find_matching_braces(string, start_index, '()')
+                            if string[start_index] == '(':#如果是括号
+                                end_index = find_matching_braces(string, start_index - 1, '()')
                                 operator_replacements.append(string[start_index+1:end_index-1])#识别绝对值表达式
+                                i = end_index
+                                if i < len(string):#如果不是运算块末尾
+                                    operator_replacements.append(r'\times')#添加乘法标识
                             else: raise ValueError("invalid func abs")#无绝对值式，立刻报错
                         case _ if string[i:start_index] in GH_letters: 
                             operator_replacements.append(string[i:start_index])#识别希腊字母
@@ -434,19 +473,23 @@ def _setup_special(string: str):
                 case r'(':#括号
                     end_index = find_matching_braces(string, i, '()')#找到括号对应)位置，如果没有则报错
                     operator_replacements.append(string[i+1:end_index-1])#把整个括号添加到替换列表中
-                    i = end_index + 1#跳过原本括号结构
+                    i = end_index#跳过原本括号结构
                     if i < len(string):#如果不是运算块末尾
-                        operator_replacements.append('\times')#添加乘法标识
+                        operator_replacements.append(r'\times')#添加乘法标识
                     continue
                 case r'{':#大括号
                     end_index = find_matching_braces(string, i, '{}')#找到括号对应}位置，如果没有则报错
                     operator_replacements.append(string[i+1:end_index-1])#把整个括号添加到替换列表中
                     i = end_index + 1#跳过原本括号结构
                     if i < len(string):#如果不是运算块末尾
-                        operator_replacements.append('\times')#添加乘法标识
+                        operator_replacements.append(r'\times')#添加乘法标识
                     continue
                 case r'^':#幂次
-                    operator_replacements.append('^')#添加幂次标识，幂次无需添加乘法标识
+                    if operator_replacements[-1] == r'\times':#如果之前标记上了乘法
+                        operator_replacements[-1] = r'^'#替换为幂次
+                    else:operator_replacements.append(r'^')#添加幂次标识，幂次无需添加乘法标识
+                    i += 1
+                    continue
                 # case r'|':#绝对值
                 #     operator_replacements.append('\absolute')#添加绝对值标识，绝对值无需添加乘法标识
                 #     absolute_string = string[i + 1:]#获取绝对值字符串
@@ -482,7 +525,7 @@ def _setup_special(string: str):
                                 else:raise ValueError("invalid combinatorics calculation")#下标后无上标，报错
                                 i = end_index + 1#跳过该字符
                                 if i < len(string):#如果不是运算块末尾
-                                    operator_replacements.append('\times')#添加乘法标识
+                                    operator_replacements.append(r'\times')#添加乘法标识
                                 continue 
                             case '^':#上标,先上标后下标的字母写法是被允许的
                                 if i+2 < len(string):#如果不是末尾
@@ -505,7 +548,7 @@ def _setup_special(string: str):
                                     else:raise ValueError("invalid combinatorics calculation")#没有下标，报错
                                 i = end_index + 1#跳过原本根式结构
                                 if i < len(string):#如果不是运算块末尾
-                                    operator_replacements.append('\times')#添加乘法标识
+                                    operator_replacements.append(r'\times')#添加乘法标识
                                 continue
                             case _:#没有上下标
                                 raise ValueError("invalid variable")#报错
@@ -515,37 +558,40 @@ def _setup_special(string: str):
                         i += 1
                     else: end_index = i
                     num_string = string[start_index:end_index]
-                    if end_index+1 < len(string):#如果不是末尾
-                        if string[end_index+1] == '!':#识别阶乘
+                    if end_index < len(string):#如果不是末尾
+                        if string[end_index] == '!':#识别阶乘
                             if '.' not in num_string:#如果不是小数
                                 i+=1#跳过!
                                 operator_replacements.append(r'\factorial')#添加阶乘标识
                             else:
                                 raise ValueError("invalid factorial")
-                        elif string[end_index+1] == r'E':#科学计数法
-                            for i in range(end_index+2,len(string)):#遍历，寻找计数法的末尾
-                                if i== end_index+2 and string[i] == '-':#允许第一个为负号
+                        elif string[end_index] == r'E':#科学计数法
+                            if end_index+1 >= len(string):raise ValueError("invalid scientific notation")
+                            SN_index = len(string)#初始赋值为末尾
+                            for i in range(end_index+1,len(string)):#遍历，寻找计数法的末尾
+                                if i== end_index+1 and string[i] in ['+','-']:#允许第一个为负号
                                     continue
-                                elif string[i].isnumeric:#数字继续遍历
+                                elif i == len(string)-1:#如果遍历完
+                                    SN_index = len(string)-1
+                                elif string[i].isdigit():#数字继续遍历
                                     continue
                                 else:#遇到非数字，结束遍历
                                     SN_index = i-1
                                     break
-                            SN_string = string[end_index+1:SN_index]#获取科学计数法字符串
+                            SN_string = string[end_index:SN_index+1]#获取科学计数法字符串
                             end_index = SN_index + 1
-                        elif string[end_index + 1] == r'%':#百分号
+                        elif string[end_index] == r'%':#百分号
                             SN_string = 'E-2'#记作10^-2
                             end_index += 1
-                    operator_replacements.append(string[start_index:end_index])#添加数字
                     try:#如果存在科学计数法
                         if SN_string:
-                            operator_replacements.append(SN_string)#添加科学计数法,没有则跳过，无视报错
-                    except:pass
+                            operator_replacements.append(num_string + SN_string)#添加科学计数法,没有则跳过，无视报错
+                    except:operator_replacements.append(string[start_index:end_index])#添加数字
                     i = end_index + 1
                     if i < len(string):#如果不是运算块末尾
-                        operator_replacements.append('\times')#添加乘法标识
+                        operator_replacements.append(r'\times')#添加乘法标识
                     continue
-                case _ if string[i].isalpha():#字母，必须先上标后下标
+                case _ if string[i].isalpha():#字母，允许上下标顺序自由
                     if i+1 < len(string):#如果不是最后一个字符
                         match string[i+1]:
                             case '_':#下标
@@ -553,10 +599,11 @@ def _setup_special(string: str):
                                     if string[i+2] == '{':#非单字符下标
                                         end_index = find_matching_braces(string, i + 2, '{}')#找下标对应的}位置
                                         operator_replacements.append(string[i:end_index])#识别字母
-                                        i = end_index + 1#跳过该字符
+                                        i = end_index#跳过该字符
                                     else:
-                                        operator_replacements.append(string[i:i+2])#识别字母
-                                        i += 2#跳过该字符
+                                        end_index = i + 2
+                                        operator_replacements.append(string[i:i+3])#识别字母
+                                        i = end_index#跳过该字符
                             case '^':#上标,先上标后下标的字母写法是被允许的
                                 if i+2 < len(string):#如果不是末尾
                                     if string[i+2] == '{':#非单字符上标
@@ -585,7 +632,7 @@ def _setup_special(string: str):
                         end_index = i
                     i = end_index + 1#跳过该字符
                     if i < len(string):#如果不是运算块末尾
-                        operator_replacements.append('\times')#添加乘法标识
+                        operator_replacements.append(r'\times')#添加乘法标识
                     continue
         return operator_replacements
 
@@ -596,9 +643,33 @@ SCIENTIFIC_NOTATION_REGEX = re.compile(
     r'^[+-]?(?:\d+\.?\d*|\.\d+)(?:[E][+-]?\d+)?$'  # 允许纯数字（如 123）和科学计数法
 )
 
-def is_final_list(operator: list):
+def is_final_list(operator: list|str):
     """第三步，判断是否为最终的可计算的列表"""
     allowed_prefixes = set(GH_letters + special_operators + operators)
+    if isinstance(operator, str):  # 如果是字符串，则直接返回
+        if operator == '':  # 空字符跳过
+            return True, ''
+        
+        # 2. 校验数字（含科学计数法）
+        if isinstance(operator, str) and SCIENTIFIC_NOTATION_REGEX.match(operator):
+            return True, ''
+        
+        # 3. 校验运算符/希腊字母/单英文字符
+        if operator in allowed_prefixes or (len(operator) == 1 and operator.isalpha()):
+            return True, ''
+        
+        # 4. 校验带下标的变量（如 x_{i} 或 \alpha_{0}）
+        if '_' in operator:
+            parts = operator.split('_', 1)
+            prefix, subscript = parts[0], parts[1]
+            # 允许希腊字母或普通字母作为前缀
+            if (prefix in GH_letters or prefix.isalpha()) and subscript.startswith('{'):
+                end = find_matching_braces(operator, operator.index('{'), '{}')
+                if end != -1 and operator[end - 1] == '}' and end == len(operator):
+                    return True, ''
+            elif (prefix in GH_letters or prefix.isalpha()) and len(subscript) == 1:
+                return True, ''
+        return False, operator
     for item in operator:
         if item == '':  # 空字符跳过
             continue
@@ -636,32 +707,38 @@ def is_final_list(operator: list):
     return True, ''
 
 #第四步，递归处理，转为最终计算列表
-def latex_to_list(string: str):
-    # 初步分割为运算块
-    parts = _setup_operators(string)
-    processed_parts = []
-    for part in parts:
-        # 递归处理每个子块
-        if any(op in part for op in special_operators):
-            # 存在特殊运算符，进一步解析
-            sub_parts = _setup_special(part)
-            processed_sub = []
-            for sub_part in sub_parts:
-                if isinstance(sub_part, list):
-                    # 嵌套结构（如分式的分子/分母）
-                    processed_sub.extend(latex_to_list(sub_part))
-                else:
-                    processed_sub.append(sub_part)
-            processed_parts.append(processed_sub)
-        else:
-            # 普通块直接验证
-            is_valid, invalid_part = is_final_list([part])
-            if not is_valid:
-                # 递归处理非法块（如括号内的表达式）
-                processed_parts.append(latex_to_list(part))
-            else:
-                processed_parts.append(part)
-    return processed_parts
+def latex_to_list(string: str|list):
+    if isinstance(string, str):  # 如果输入是一个字符串
+        try:
+            if is_final_list(string)[0]:#最终元素，不处理
+                return string
+            elif is_multi_operators(string):#多运算块，切割
+                parts = _setup_operators(string)
+            else:#单运算块，切割识别
+                parts = _setup_special(string)
+            while not is_final_list(parts)[0]:
+                parts[parts.index(is_final_list(parts)[1])] = latex_to_list(is_final_list(parts)[1])#非最终列表，递归
+                continue
+            else: return parts#最终列表，返回
+        except Exception as e:return e
+    elif isinstance(string, list):  # 如果输入是一个列表
+        try:
+            pass
+        except Exception as e:return e
+
+def is_multi_operators(string: str):#判断是否为多运算块
+    stack = []
+    brace_pairs = {'(': ')', '[': ']', '{': '}'}
+    for i in range(len(string)):
+        char = string[i]
+        if char in brace_pairs.keys():
+            stack.append(char)
+        elif char in brace_pairs.values():
+            if not stack or brace_pairs[stack.pop()] != char:
+                return -1  # 括号不匹配
+        if char in ['+','-','='] and not stack:  # 仅在栈为空时匹配
+            return True
+    return False
 
 def find_matching_braces(s, start, brace_type='{}'):
     """匹配括号,s为字符串，start为起始位置，brace_type为括号类型，返回匹配的括号位置"""
@@ -677,7 +754,7 @@ def find_matching_braces(s, start, brace_type='{}'):
                 return -1  # 提前发现不匹配
             stack.pop()
             if not stack:
-                return i+1
+                return i+1 #返回匹配的括号位置，而非索引
     return -1  # 明确返回-1表示未找到
 
 def find_start_position(string, start_index):
@@ -696,6 +773,10 @@ def find_character_position(string: str, target: str, start_index=0):
     """寻找字符位置（考虑括号嵌套）"""
     stack = []
     brace_pairs = {'(': ')', '[': ']', '{': '}'}
+    if target in brace_pairs.values() or target in brace_pairs.keys():
+        for i in range(len(string)):
+            if string[i] == target:
+                return i
     for i in range(start_index, len(string)):
         char = string[i]
         if char in brace_pairs.keys():
@@ -737,32 +818,24 @@ def _setup_special_with_timeout(string: str, timeout: float = 1.0):
         raise error[0]
     
     return result[0]
-# 测试函数
-def test_is_final_list():
-    for i, test_case in enumerate(test_cases):
-        result = is_final_list(test_case)
-        print(f"Test case {i+1}: {test_case} -> {result}")
 
 if __name__ == '__main__':
-
-    # 测试用例
-    test_cases = [
-    # 正常情况
-    ["123", "45.67", "1.23E10", "x", r"\alpha", "x_{i}", r"\alpha_{0}","e"],
-    # 空字符
-    ["", "123", "x"],
-    # 科学计数法
-    ["1.23E10", "4.56E-7"],
-    # 运算符和希腊字母
-    ["+", "-", r"\times", r"\div", r"\alpha", r"\beta"],
-    # 带下标的变量
-    ["x_{i}", r"\alpha_{0}", "y_{123}"],
-    # 非法字符
-    ["123", r"\times", "a", 'b','c',"x_{i}", "y_i", "z_{i}","i"],
-    # 混合情况
-    ["123", "x", "x_{i}", "4.56E-7", "+", "y_{123}", "1.23E10", "z_i"],
-    #列表情况
-    ["\int","0","1",["x","^","2x"],"x"]
-    ]
+    expressions = [
+        r'\frac{\frac{abc}{xyz}+\ln(2)}{x_0^2}-\frac{\sqrt{abc}}{2}=\sqrt{abc}',
+        ]
+    
     # 运行测试
-    test_is_final_list()
+    for expr in expressions:
+        try:
+            result = latex_to_list(expr)
+            print(f"Expression: {expr}")
+            print(f"Results: {result}\n")
+        except TimeoutError as te:
+            print(f"Expression: {expr}")
+            print(f"Error: {te}\n")
+        except ValueError as ve:
+            print(f"Expression: {expr}")
+            print(f"Error: {ve}\n")
+        except Exception as e:
+            print(f"Expression: {expr}")
+            print(f"Unexpected Error: {e}\n")
