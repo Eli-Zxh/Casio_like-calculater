@@ -3,10 +3,10 @@ GH_letters = [r'\alpha',r'\beta',r'\chi',r'\delta',r'\epsilon',r'\eta',r'\gamma'
                   r'\psi',r'\rho',r'\sigma',r'\tau',r'\theta',r'upsilon',r'\xi',r'\zeta',
                   r'\digamma',r'\varepsilon',r'\varkappa',r'\varphi',r'\varpi',r'\varrho',r'\varsigma',r'\vartheta',
                   r'\Delta',r'\Gamma',r'\Lambda',r'\Omega',r'\Phi',r'\Pi',r'\Psi',r'\Sigma',
-                  r'\Theta',r'\Upsilon',r'\Xi',r'\aleph',r'\beth',r'daleth',r'\gimel']
+                  r'\Theta',r'\Upsilon',r'\Xi',r'\aleph',r'\beth',r'daleth',r'\gimel',r'\infty',r'+\infty',r'-\infty']
 special_operators = [r'\frac',r'\sqrt',r'\int',r'\sum',r'\prod',r'\log',r'\lim',r'\limsup',r'\liminf',r'\sin',r'\cos',r'\tan',
                     r'\sec',r'\csc',r'\cot',r'\sinh',r'\cosh',r'\tanh',r'\arcsin',r'\arccos',r'\arctan',r'\exp',r'\ln',r'\lg',
-                    r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr']
+                    r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr',r'\abs']
 operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot',r'^']
 
 class AbsProcessor:
@@ -40,49 +40,24 @@ class AbsProcessor:
                     if self.brace_stacks["{}"] == 0:
                         raise ValueError("Mismatched braces")
                     self.brace_stacks["{}"] -= 1
-            
-            # 处理绝对值符号 |（仅在括号栈为0时允许匹配）
-            if c == "|" and not self.brace_stacks["()"] and not self.brace_stacks["[]"] and not self.brace_stacks["{}"]:
-                if not self.pipe_stack:
-                    # 外层 | 入栈
-                    self.pipe_stack.append(i)
-                else:
-                    # 匹配到外层 |，替换为 \abs()
-                    start = self.pipe_stack.pop()
-                    content = "".join(chars[start+1:i])
-                    # 递归处理内部可能存在的嵌套绝对值
-                    content = self.process(content)  # 关键点：递归处理
-                    # 替换起始 | 和结束 | 之间的内容
-                    output.append("\\abs(")
-                    output.extend(list(content))
-                    output.append(")")
-                    i += 1  # 跳过原结束 |
-                    continue
-            
-            # 处理括号内的绝对值符号
-            if c == "(" or c == "[" or c == "{":
-                # 找到匹配的括号结束位置
-                brace_type = c + {")": "(", "]": "[", "}": "{"}[c]
-                end_index = find_matching_braces(s, i, brace_type)
-                if end_index == -1:
-                    raise ValueError(f"Mismatched {brace_type}")
-                
-                # 递归处理括号内的内容
-                inner_content = s[i+1:end_index-1]
-                processed_inner_content = self.process(inner_content)
-                
-                # 添加处理后的括号内容
-                output.append(c)
-                output.extend(processed_inner_content)
-                output.append({")": "(", "]": "[", "}": "{"}[c])
-                
-                i = end_index  # 跳过已处理的括号内容
-                continue
-
-            if not self.pipe_stack:# 如果绝对值栈为空，才添加原字符
-                output.append(c)
+                case "|":
+                    if not self.pipe_stack:#外层入栈
+                        self.pipe_stack.append((i,self.brace_stacks["()"],self.brace_stacks["[]"],self.brace_stacks["{}"]))
+                    else:
+                        start,a,b,c = self.pipe_stack[-1]#提取上一个 | 的状态
+                        if self.brace_stacks["()"] == a and self.brace_stacks["[]"] == b and self.brace_stacks["{}"] == c:
+                            self.pipe_stack.pop()# 匹配到内层 |，替换为 \abs()
+                            output[start] = "\\abs("
+                            output.append(")")
+                            i += 1# 跳过原结束 |
+                            continue
+                        else:
+                            self.pipe_stack.append((i,self.brace_stacks["()"],self.brace_stacks["[]"],self.brace_stacks["{}"]))
+            output.append(c)# 如果绝对值栈为空，才添加原字符
             i += 1
+        if self.pipe_stack or self.brace_stacks["()"] or self.brace_stacks["[]"] or self.brace_stacks["{}"]:raise ValueError("Mismatched absolute expression")#任何一个栈不为空，则报错，‘四大皆空’
         return "".join(output)
+
 def _setup_operators(string: str):
     """字符处理切割为运算块（严格保持分割逻辑，修复减号分割问题）"""
     # 第零步：预处理非法字符和绝对值替换
@@ -168,14 +143,562 @@ def _setup_operators(string: str):
             final_parts.append(part)
     
     return final_parts
+'''
 def _setup_special(string: str):
+    i = 0
+    operator_replacements = []
+    GH_letters = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+
+    while i < len(string):
+        match string[i]:
+            case '-':
+                operator_replacements.append('-')
+                i += 1
+                continue
+            case '\\':
+                if i + 6 <= len(string) and string[i:i + 4] == r'\div':
+                    if operator_replacements[-1] == r'\times':
+                        operator_replacements[-1] = r'\div'
+                    else:
+                        operator_replacements.append(r'\div')
+                    i += 4
+                    continue
+                elif i + 6 < len(string) and string[i:i + 5] == r'\cdot':
+                    if operator_replacements[-1] == r'\times':
+                        operator_replacements[-1] = r'\cdot'
+                    else:
+                        operator_replacements.append(r'\cdot')
+                    i += 5
+                    continue
+                elif i + 6 < len(string) and string[i:i + 6] == r'\times':
+                    if operator_replacements[-1] != r'\times':
+                        operator_replacements.append(r'\times')
+                    i += 6
+                    continue
+                start_index = find_start_position(string, i)
+                match string[i:start_index]:
+                    case r'\frac':
+                        handle_fraction(string, i, operator_replacements)
+                    case r'\sqrt':
+                        handle_sqrt(string, i, operator_replacements)
+                    case r'\int':
+                        handle_integral(string, i, operator_replacements)
+                    case r'\sum'|r'\prod':
+                        handle_sum_prod(string, i, operator_replacements)
+                    case r'\log':
+                        handle_log(string, i, operator_replacements)
+                    case r'\lim'|r'\limsup'|r'\liminf':
+                        handle_limit(string, i, operator_replacements)
+                    case r'\sin'|r'\cos'|r'\tan'|r'\sec'|r'\csc'|r'\cot'|r'\sinh'|r'\cosh'|r'\tanh'|r'\arcsin'|r'\arccos'|r'\arctan'|r'\exp'|r'\ln'|r'\lg'|r'\arg'|r'\coth'|r'\deg'|r'\factorial':
+                        handle_trig_functions(string, i, start_index, operator_replacements)
+                    case r'\FACT':
+                        handle_fact(string, i, operator_replacements)
+                    case r'\gcd':
+                        handle_gcd(string, i, operator_replacements)
+                    case r'\max'|r'\sup':
+                        handle_max(string, i, operator_replacements)
+                    case r'\min':
+                        handle_min(string, i, operator_replacements)
+                    case r'\abs':
+                        handle_abs(string, i, operator_replacements)
+                    case _ if string[i:start_index] in GH_letters:
+                        operator_replacements.append(string[i:start_index])
+                        continue
+            case r'(':
+                handle_parentheses(string, i, operator_replacements)
+            case r'{':
+                handle_braces(string, i, operator_replacements)
+            case r'^':
+                handle_power(operator_replacements)
+            case r'C'|r'P'|r'A':
+                handle_combinatorics(string, i, operator_replacements)
+            case _ if string[i].isnumeric():
+                handle_number(string, i, operator_replacements)
+            case _ if string[i].isalpha():
+                handle_letter(string, i, operator_replacements)
+        i += 1
+
+    return operator_replacements
+
+def handle_fraction(string, i, operator_replacements):
+    operator_replacements.append(r'\frac')
+    if string[i + 5] == '{':
+        end_index = find_matching_braces(string, i + 5, '{}')
+        if end_index >= len(string):
+            raise ValueError("invalid expression")
+        if end_index != -1 and string[end_index] == '{':
+            operator_replacements.append(string[i + 6:end_index - 1])
+            end_index2 = find_matching_braces(string, end_index, '{}')
+            if end_index2 != -1:
+                operator_replacements.append(string[end_index + 1:end_index2 - 1])
+                if end_index2 < len(string):
+                    operator_replacements.append(r'\times')
+            else:
+                raise ValueError("invalid expression")
+        else:
+            raise ValueError("invalid expression")
+    else:
+        raise ValueError("invalid expression")
+
+def handle_sqrt(string, i, operator_replacements):
+    operator_replacements.append(r'\sqrt')
+    match string[i + 5]:
+        case '[':
+            end_index = find_matching_braces(string, i + 4, '[]')
+            if end_index != -1 and string[end_index] == '{':
+                if (i + 6 < end_index - 2 and string[i + 6:end_index - 2].isdigit()) or (i + 6 == end_index - 2 and string[i + 6].isdigit()):
+                    operator_replacements.append(string[i + 6:end_index - 1])
+                    end_index2 = find_matching_braces(string, end_index - 1, '{}')
+                    if end_index2 != -1:
+                        operator_replacements.append(string[end_index + 1:end_index2 - 1])
+                        if end_index2 < len(string):
+                            operator_replacements.append(r'\times')
+                    else:
+                        raise ValueError("invalid expression")
+                else:
+                    raise ValueError("invalid expression")
+            else:
+                raise ValueError("invalid expression")
+        case '{':
+            operator_replacements.append('2')
+            end_index = find_matching_braces(string, i + 5, '{}')
+            if end_index != -1:
+                operator_replacements.append(string[i + 6:end_index - 1])
+                if end_index < len(string):
+                    operator_replacements.append(r'\times')
+            else:
+                raise ValueError("invalid expression")
+        case _:
+            raise ValueError("invalid expression")
+
+def handle_integral(string, i, operator_replacements):
+    operator_replacements.append(r'\int')
+    match string[i + 4]:
+        case '_' | '^':
+            int_string = string[i + 4:]
+            down_index = find_character_position(int_string, '_')
+            if int_string[down_index + 1] == '{':
+                down_end_index = find_matching_braces(int_string, down_index + 1, '{}')
+                operator_replacements.append(int_string[down_index + 2:down_end_index - 1])
+            elif int_string[down_index + 1].isalpha() or int_string[down_index + 1].isdigit():
+                down_end_index = down_index + 2
+                operator_replacements.append(int_string[down_index])
+            else:
+                raise ValueError("invalid down limit")
+            up_index = find_character_position(int_string, '^')
+            if int_string[up_index + 1] == '{':
+                up_end_index = find_matching_braces(int_string, up_index + 1, '{}')
+                operator_replacements.append(int_string[up_index + 2:up_end_index - 1])
+            elif int_string[up_index + 1].isalpha() or int_string[up_index + 1].isdigit():
+                up_end_index = up_index + 2
+                operator_replacements.append(int_string[up_index])
+            else:
+                raise ValueError("invalid up limit")
+            tag_index = max(down_end_index, up_end_index)
+            int_string = int_string[tag_index:]
+        case '{':
+            operator_replacements.append('')
+            operator_replacements.append('')
+            int_string = string[i + 4:]
+            tag_index = 0
+    expression_index = find_character_position(int_string, '{')
+    if expression_index != -1:
+        end_index = find_matching_braces(int_string, expression_index, '{}')
+        int_string = int_string[expression_index + 1:end_index - 1]
+        d_index = find_character_position(int_string, 'd')
+        if d_index != -1:
+            d_string = int_string[d_index + 1:]
+            if d_string[0] == '{' or d_string == '(':
+                operator_replacements.append(d_string[1:-1])
+            else:
+                operator_replacements.append(int_string[d_index + 1:])
+        else:
+            operator_replacements.append('x')
+        operator_replacements.append(int_string[:d_index])
+        if end_index + 4 + tag_index < len(string):
+            operator_replacements.append(r'\times')
+    else:
+        raise ValueError("invalid expression")
+
+def handle_sum_prod(string, i, operator_replacements):
+    operator_replacements.append(string[i:i + 4])
+    sum_string = string[i + 4:]
+    down_index = find_character_position(sum_string, '_')
+    if down_index != -1:
+        if sum_string[down_index + 1] == '{':
+            down_end_index = find_matching_braces(sum_string, down_index + 1, '{}')
+            if down_end_index == -1:
+                raise ValueError("invalid down limit")
+            down_expression = sum_string[down_index + 2:down_end_index - 1]
+            equal_index = find_character_position(down_expression, '=')
+            if equal_index != -1:
+                operator_replacements.append(down_expression[:equal_index])
+                operator_replacements.append(down_expression[equal_index + 1:])
+            else:
+                operator_replacements.append(down_expression)
+                is_variable = True
+                operator_replacements.append('')
+        elif sum_string[down_index + 1].isdigit():
+            operator_replacements.append('i')
+            operator_replacements.append(sum_string[down_index + 1:])
+        else:
+            raise ValueError("invalid down limit")
+    else:
+        raise ValueError("invalid down limit")
+    up_index = find_character_position(sum_string, '^')
+    if up_index != -1:
+        if sum_string[up_index + 1] == '{':
+            up_end_index = find_matching_braces(sum_string, up_index + 1, '{}')
+            if up_end_index == -1:
+                raise ValueError("invalid up limit")
+            operator_replacements.append(sum_string[up_index + 2:up_end_index - 1])
+        elif sum_string[up_index + 1].isalpha() or sum_string[up_index + 1].isdigit():
+            operator_replacements.append(sum_string[up_index + 1])
+        else:
+            raise ValueError("invalid up limit")
+    else:
+        if is_variable:
+            operator_replacements.append('')
+        else:
+            raise ValueError("invalid up limit")
+    end_index = max(down_end_index, up_end_index)
+    sum_string = sum_string[end_index:]
+    expression_index = find_character_position(sum_string, '{')
+    if expression_index != -1:
+        expr_end_index = find_matching_braces(sum_string, expression_index, '{}')
+        operator_replacements.append(sum_string[expression_index + 1:expr_end_index - 1])
+    else:
+        raise ValueError("invalid expression")
+    if end_index + i + expr_end_index < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_log(string, i, operator_replacements):
+    operator_replacements.append(r'\log')
+    down_index = find_character_position(string, '_')
+    if down_index != -1:
+        if string[down_index + 1] == '{':
+            end_index = find_matching_braces(string, down_index, '{}')
+            operator_replacements.append(string[down_index + 2:end_index - 1])
+        else:
+            operator_replacements.append(string[down_index])
+    else:
+        operator_replacements.append('10')
+    start_braces_index = find_character_position(string, '(')
+    if start_braces_index != -1:
+        end_index = find_matching_braces(string, start_braces_index, '()')
+        operator_replacements.append(string[start_braces_index + 1:end_index - 1])
+    else:
+        raise ValueError(f'invalid function log')
+    if end_index + 1 < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_limit(string, i, operator_replacements):
+    operator_replacements.append(r'\lim')
+    down_index = find_character_position(string, '_')
+    if down_index != -1:
+        if string[down_index + 1] == '{':
+            down_end_index = find_matching_braces(string, down_index + 1, '{}')
+            down_expression = string[down_index + 2:down_end_index - 1]
+            index = down_expression.find(r'\rightarrow')
+            if index != -1:
+                operator_replacements.append(down_expression[:index])
+                operator_replacements.append(down_expression[index + 11:])
+            else:
+                raise ValueError("invalid down limit")
+            lim_expression = string[down_end_index:]
+            if lim_expression[0] == '{':
+                end_index = find_matching_braces(lim_expression, 0, '{}')
+                if end_index == -1:
+                    raise ValueError("invalid expression")
+                operator_replacements.append(lim_expression[1:end_index - 1])
+            else:
+                raise ValueError("invalid expression")
+        else:
+            raise ValueError("invalid down limit")
+    else:
+        raise ValueError("invalid limit")
+    if end_index + down_end_index < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_trig_functions(string, i, start_index, operator_replacements):
+    func = string[i:start_index]
+    operator_replacements.append(func)
+    if string[start_index + 1] == '^':
+        if string[start_index + 2] == '{':
+            end_up_index = find_matching_braces(string, start_index + 2, '{}')
+            power_string = string[start_index + 3:end_up_index - 1]
+        else:
+            end_up_index = start_index + 2
+            power_string = string[start_index + 2]
+    start_braces_index = find_character_position(string, '(')
+    if start_braces_index != -1:
+        end_index = find_matching_braces(string, start_braces_index, '()')
+        operator_replacements.append(string[start_braces_index + 1:end_index - 1])
+        try:
+            if power_string:
+                operator_replacements.append('^')
+                operator_replacements.append(power_string)
+        except:
+            pass
+    else:
+        raise ValueError(f'invalid function {func}')
+    if end_index + 1 < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_fact(string, i, operator_replacements):
+    operator_replacements.append(r'\FACT')
+    if string[i + 4] == '(':
+        end_index = find_matching_braces(string, i + 4, '()')
+        operator_replacements.append(string[i + 5:end_index - 1])
+        if end_index < len(string):
+            operator_replacements.append(r'\times')
+    else:
+        raise ValueError('invalid function FACT')
+
+def handle_gcd(string, i, operator_replacements):
+    operator_replacements.append(r'\gcd')
+    gcd_string = string[i + 4:]
+    start_braces_index = find_character_position(gcd_string, '(')
+    if start_braces_index != -1:
+        end_index = find_matching_braces(gcd_string, start_braces_index, '()')
+        comma_index = gcd_string.find(',')
+        operator_replacements.append(gcd_string[start_braces_index + 1:comma_index])
+        operator_replacements.append(gcd_string[comma_index + 1:end_index - 1])
+    else:
+        raise ValueError("invalid func gcd")
+    if end_index + 4 < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_max(string, i, operator_replacements):
+    operator_replacements.append(r'\max')
+    if string[i + 4] == '{':
+        end_index = find_matching_braces(string, i + 5, '{}')
+        min_string = string[i + 6:end_index - 1]
+        parts = min_string.split(',')
+        for part in parts:
+            operator_replacements.append(part)
+    else:
+        raise ValueError("invalid number")
+    if end_index < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_min(string, i, operator_replacements):
+    operator_replacements.append(r'\min')
+    if string[i + 4] == '{':
+        end_index = find_matching_braces(string, i + 5, '{}')
+        min_string = string[i + 6:end_index - 1]
+        parts = min_string.split(',')
+        for part in parts:
+            operator_replacements.append(part)
+    else:
+        raise ValueError("invalid number")
+    if end_index + 1 < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_abs(string, i, operator_replacements):
+    operator_replacements.append(r'\abs')
+    if string[i + 4] == '(':
+        end_index = find_matching_braces(string, i + 4, '()')
+        operator_replacements.append(string[i + 5:end_index - 1])
+        if end_index < len(string):
+            operator_replacements.append(r'\times')
+    else:
+        raise ValueError("invalid func abs")
+
+def handle_parentheses(string, i, operator_replacements):
+    end_index = find_matching_braces(string, i, '()')
+    operator_replacements.append(string[i + 1:end_index - 1])
+    if end_index < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_braces(string, i, operator_replacements):
+    end_index = find_matching_braces(string, i, '{}')
+    operator_replacements.append(string[i + 1:end_index - 1])
+    if end_index + 1 < len(string):
+        operator_replacements.append(r'\times')
+
+def handle_power(operator_replacements):
+    if operator_replacements[-1] == r'\times':
+        operator_replacements[-1] = r'^'
+    else:
+        operator_replacements.append(r'^')
+
+def handle_combinatorics(string, i, operator_replacements):
+    operator_replacements.append(string[i])  # 添加排列组合运算符
+    if i + 1 < len(string):
+        match string[i + 1]:
+            case '_':  # 下标
+                if i + 2 < len(string):
+                    if string[i + 2] == '{':  # 非单字符下标
+                        end_down_index = find_matching_braces(string, i + 2, '{}')  # 找下标对应的}位置
+                        operator_replacements.append(string[i + 3:end_down_index])  # 识别排列组合下标
+                    else:
+                        end_down_index = i + 2  # 单字符下标
+                        operator_replacements.append(string[i + 2])  # 识别排列组合下标
+                if end_down_index + 2 < len(string):
+                    if string[end_down_index + 1] == '^':  # 下标后有上标
+                        if string[end_down_index + 2] == '{':  # 非单字符
+                            end_index = find_matching_braces(string, end_down_index + 2, '{}')  # 找到对应的右括号
+                            if end_index == -1:
+                                raise ValueError("missing ')'")
+                            operator_replacements.append(string[end_down_index + 3:end_index - 1])  # 识别上标
+                        else:  # 单字符
+                            end_index = end_down_index + 2
+                            operator_replacements.append(string[end_down_index + 2])  # 识别上标
+                else:
+                    raise ValueError("invalid combinatorics calculation")  # 下标后无上标，报错
+                if end_index < len(string):
+                    operator_replacements.append(r'\times')  # 添加乘法标识
+            case '^':  # 上标, 先上标后下标的字母写法是被允许的
+                if i + 2 < len(string):  # 如果不是末尾
+                    if string[i + 2] == '{':  # 非单字符上标
+                        end_up_index = find_matching_braces(string, i + 2, '{}')  # 找上标对应的}位置
+                        power_string = string[i + 3:end_up_index - 1]  # 切出上标
+                    else:  # 单字符上标
+                        end_up_index = i + 2
+                        power_string = string[i + 2]  # 切出上标
+                if end_up_index + 1 < len(string):  # 如果不是末尾
+                    if string[end_up_index + 1] == '_':  # 如果后面还有下标
+                        if end_up_index + 2 < len(string) and string[end_up_index + 2] == '{':  # 非单字符下标
+                            end_index = find_matching_braces(string, end_up_index + 2, '{}')  # 找下标对应的}位置
+                            operator_replacements.append(string[end_up_index + 3:end_index])  # 识别下标
+                            operator_replacements.append(power_string)  # 添加上标
+                        else:
+                            end_index = end_up_index + 2
+                            operator_replacements.append(string[end_index])  # 识别下标
+                            operator_replacements.append(power_string)  # 添加上标
+                    else:
+                        raise ValueError("invalid combinatorics calculation")  # 没有下标，报错
+                if end_index < len(string):
+                    operator_replacements.append(r'\times')  # 添加乘法标识
+            case _:
+                raise ValueError("invalid variable")  # 报错
+
+def handle_number(string, i, operator_replacements):
+    start_index = i
+    while i < len(string) and (string[i].isnumeric() or string[i] == '.'):
+        i += 1
+    num_string = string[start_index:i]
+    
+    if i < len(string):
+        if string[i] == '!':  # 识别阶乘
+            if '.' not in num_string:  # 如果不是小数
+                i += 1  # 跳过 '!'
+                operator_replacements.append(num_string)
+                operator_replacements.append(r'!')  # 添加阶乘标识
+            else:
+                raise ValueError("invalid factorial")
+        elif string[i] == 'E':  # 科学计数法
+            if i + 1 >= len(string):
+                raise ValueError("invalid scientific notation")
+            SN_index = len(string)  # 初始赋值为末尾
+            for j in range(i + 1, len(string)):  # 遍历，寻找计数法的末尾
+                if j == i + 1 and string[j] in ['+', '-']:  # 允许第一个为负号
+                    continue
+                elif j == len(string) - 1:  # 如果遍历完
+                    SN_index = len(string) - 1
+                elif string[j].isdigit():  # 数字继续遍历
+                    continue
+                else:  # 遇到非数字，结束遍历
+                    SN_index = j - 1
+                    break
+            SN_string = string[i:SN_index + 1]  # 获取科学计数法字符串
+            i = SN_index + 1
+            operator_replacements.append(num_string + SN_string)  # 添加科学计数法
+        elif string[i] == '%':  # 百分号
+            operator_replacements.append(num_string)
+            operator_replacements.append(r'\times')  # 添加乘法标识
+            operator_replacements.append('0.01')  # 添加百分号转换
+            i += 1  # 跳过 '%'
+        else:
+            operator_replacements.append(num_string)  # 添加数字
+    else:
+        operator_replacements.append(num_string)  # 添加数字
+    
+    if i < len(string):  # 如果不是运算块末尾
+        operator_replacements.append(r'\times')  # 添加乘法标识
+    
+    return i
+
+def handle_letter(string, i, operator_replacements):
+    if i + 1 < len(string):
+        match string[i + 1]:
+            case '_':  # 下标
+                if i + 2 < len(string):
+                    if string[i + 2] == '{':  # 非单字符下标
+                        end_index = find_matching_braces(string, i + 2, '{}')  # 找下标对应的}位置
+                        if end_index == -1:
+                            raise ValueError("invalid subscript")
+                        subscript = string[i + 3:end_index - 1]  # 识别下标
+                        i = end_index  # 跳过该字符
+                    else:
+                        subscript = string[i + 2]  # 识别单字符下标
+                        i += 2  # 跳过该字符
+                else:
+                    raise ValueError("invalid subscript")
+                operator_replacements.append(f"{string[i]}_{{{subscript}}}")  # 识别字母及下标
+            case '^':  # 上标
+                if i + 2 < len(string):
+                    if string[i + 2] == '{':  # 非单字符上标
+                        end_index = find_matching_braces(string, i + 2, '{}')  # 找上标对应的}位置
+                        if end_index == -1:
+                            raise ValueError("invalid superscript")
+                        superscript = string[i + 3:end_index - 1]  # 识别上标
+                        i = end_index  # 跳过该字符
+                    else:
+                        superscript = string[i + 2]  # 识别单字符上标
+                        i += 2  # 跳过该字符
+                else:
+                    raise ValueError("invalid superscript")
+                operator_replacements.append(f"{string[i]}^{{{superscript}}}")  # 识别字母及上标
+            case _:
+                operator_replacements.append(string[i])  # 识别字母
+                i += 1  # 跳过该字符
+    else:
+        operator_replacements.append(string[i])  # 识别字母
+        i += 1  # 跳过该字符
+    
+    if i < len(string):  # 如果不是运算块末尾
+        operator_replacements.append(r'\times')  # 添加乘法标识
+    
+    return i
+'''
+def _setup_special(string: str):
+        # 第零步：预处理非法字符和绝对值替换
+        string = string.replace(" ", "").replace("\n", "")
+        if "#" in string:
+            raise ValueError("invalid character")
+        # 绝对值替换逻辑（保持不变）
+        pipe_indices = [i for i, c in enumerate(string) if c == "|"]
+        if len(pipe_indices) % 2 != 0:
+            raise ValueError("invalid absolute expression")
+        if pipe_indices:
+            string = AbsProcessor().process(string)
         #第二步，对于每个分割的部分，做运算块判定，对满足运算块判定的部分去运算块重复第一步
         i = 0
         operator_replacements = []
         while i < len(string):
             match string[i]:
-                case '-':#负号，直接合并到operator_replacements中，并跳过
-                    operator_replacements.append('-')
+                case r'*':#乘号，直接合并到operator_replacements中，记为叉乘，并跳过
+                    if operator_replacements[-1] != r'\times':#2.2如果前一个运算符是乘号，则替换为叉乘
+                        operator_replacements.append(r'\times')#识别为叉乘
+                    else:pass#否则不增加叉乘符号
+                    i += 1#2.2跳过乘号
+                    continue
+                case r'/':#除号，直接合并到operator_replacements中
+                    if operator_replacements[-1] == r'\times':#2.2如果前一个运算符是乘号，则替换为除号
+                        operator_replacements[-1] = r'\div'#替换为除号
+                    else:operator_replacements.append(r'\div')#识别为除号
+                    i += 1#2.2跳过除号
+                    continue
+                case '-'|'+':#正负号，直接合并到operator_replacements中，并跳过，对于正负无穷单独识别
+                    try:
+                        if i+2 < len(string) and string[i+2] == '\\' and i+7 < len(string) and string[i+3:i+7] == r'\infty':#2.1负无穷
+                            operator_replacements.append(string[i]+r'\infty')
+                            i += 7
+                            continue
+                    except:pass
+                    operator_replacements.append(string[i])
                     i += 1
                     continue
                 case '\\':
@@ -260,7 +783,7 @@ def _setup_special(string: str):
                                         operator_replacements.append(int_string[down_index + 2:down_end_index-1])#识别积分下限
                                     elif int_string[down_index + 1].isalpha() or int_string[down_index + 1].isdigit():#单字符识别
                                         down_end_index = down_index + 2#下限为单字符
-                                        operator_replacements.append(int_string[down_index])
+                                        operator_replacements.append(int_string[down_index + 1])
                                     else: raise ValueError("invalid down limit")
                                     up_index = find_character_position(int_string,'^')#找积分上限
                                     if int_string[up_index + 1] == '{':#非单字符
@@ -268,7 +791,7 @@ def _setup_special(string: str):
                                         operator_replacements.append(int_string[up_index + 2:up_end_index -1])#识别积分上限
                                     elif int_string[up_index + 1].isalpha() or int_string[up_index + 1].isdigit():#单字符识别
                                         up_end_index = up_index + 2
-                                        operator_replacements.append(int_string[up_index])
+                                        operator_replacements.append(int_string[up_index + 1])
                                     else: raise ValueError("invalid up limit")
                                     tag_index = max(down_end_index,up_end_index)#取下限和上限的最大值
                                     int_string = int_string[tag_index:]
@@ -287,7 +810,9 @@ def _setup_special(string: str):
                                     if d_string[0] == '{' or d_string == '(':
                                         operator_replacements.append(d_string[1:-1])#去括号，识别积分变量
                                     else:operator_replacements.append(int_string[d_index + 1:])#识别积分变量
-                                else: operator_replacements.append('x')#默认为x
+                                else: 
+                                    operator_replacements.append('x')#默认为x
+                                    d_index = len(int_string)
                                 operator_replacements.append(int_string[:d_index])#识别积分表达式
                                 i = end_index + 4 + tag_index#跳过原本积分结构
                                 if i < len(string):#如果不是运算块末尾
@@ -323,6 +848,7 @@ def _setup_special(string: str):
                                     operator_replacements.append(sum_string[up_index + 2:up_end_index-1])#识别上限
                                 elif sum_string[up_index + 1].isalpha() or sum_string[up_index + 1].isdigit():#允许单字符
                                     operator_replacements.append(sum_string[up_index + 1])#识别上限
+                                    up_end_index = up_index + 2
                                 else: raise ValueError("invalid up limit")
                             else: 
                                 if is_variable:operator_replacements.append('')#不定求和记为空
@@ -446,14 +972,14 @@ def _setup_special(string: str):
                             raise ValueError("暂不支持随机数运算")
                         case r'\inf'|r'\min':#最小值
                             operator_replacements.append(r'\min')#添加最小值标识
-                            if string[start_index+1] == '{':
+                            if string[start_index] == '{':
                                 end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
                                 min_string = string[start_index + 2:end_index-1]#切出集合
                                 parts = min_string.split(',')#切出集合元素
                                 for part in parts:
                                     operator_replacements.append(part)#识别每个数字
                             else: raise ValueError("invalid number")#无表达式，立刻报错
-                            i = end_index + 1#跳过原本函数结构
+                            i = end_index#跳过原本函数结构
                             if i < len(string):#如果不是运算块末尾
                                 operator_replacements.append(r'\times')#添加乘法标识
                         case r'\Pr':
@@ -477,6 +1003,12 @@ def _setup_special(string: str):
                     if i < len(string):#如果不是运算块末尾
                         operator_replacements.append(r'\times')#添加乘法标识
                     continue
+                case r'[':#中括号
+                    end_index = find_matching_braces(string, i, '[]')#找到括号对应]位置，如果没有则报错
+                    operator_replacements.append(string[i+1:end_index-1])#把整个括号添加到替换列表中
+                    i = end_index#跳过原本括号结构
+                    if i < len(string):#如果不是运算块末尾
+                        operator_replacements.append(r'\times')#添加乘法标识
                 case r'{':#大括号
                     end_index = find_matching_braces(string, i, '{}')#找到括号对应}位置，如果没有则报错
                     operator_replacements.append(string[i+1:end_index-1])#把整个括号添加到替换列表中
@@ -561,7 +1093,7 @@ def _setup_special(string: str):
                     if end_index < len(string):#如果不是末尾
                         if string[end_index] == '!':#识别阶乘
                             if '.' not in num_string:#如果不是小数
-                                i+=1#跳过!
+                                end_index+=1#跳过!
                                 operator_replacements.append(r'\factorial')#添加阶乘标识
                             else:
                                 raise ValueError("invalid factorial")
@@ -587,7 +1119,7 @@ def _setup_special(string: str):
                         if SN_string:
                             operator_replacements.append(num_string + SN_string)#添加科学计数法,没有则跳过，无视报错
                     except:operator_replacements.append(string[start_index:end_index])#添加数字
-                    i = end_index + 1
+                    i = end_index
                     if i < len(string):#如果不是运算块末尾
                         operator_replacements.append(r'\times')#添加乘法标识
                     continue
@@ -598,7 +1130,7 @@ def _setup_special(string: str):
                                 if i+2 < len(string):
                                     if string[i+2] == '{':#非单字符下标
                                         end_index = find_matching_braces(string, i + 2, '{}')#找下标对应的}位置
-                                        operator_replacements.append(string[i:end_index])#识别字母
+                                        operator_replacements.append(string[i:end_index - 1])#识别字母
                                         i = end_index#跳过该字符
                                     else:
                                         end_index = i + 2
@@ -608,22 +1140,32 @@ def _setup_special(string: str):
                                 if i+2 < len(string):#如果不是末尾
                                     if string[i+2] == '{':#非单字符上标
                                         end_up_index = find_matching_braces(string, i + 2, '{}')#找上标对应的}位置
-                                        power_string = string[i+3:end_index]#切出上标 
+                                        power_string = string[i+3:end_up_index-1]#切出上标 
                                     else:#单字符上标
-                                        end_up_index = i + 2
+                                        end_up_index = i + 3
                                         power_string = string[i+2]#切出上标
-                                if end_up_index + 1 < len(string):#如果不是末尾
-                                    if string[end_up_index+1] == '_':#如果后面还有下标
-                                        if end_up_index+2 < len(string) and string[end_up_index+2] == '{':#非单字符下标
-                                            end_index = find_matching_braces(string, end_up_index + 2, '{}')#找下标对应的}位置
-                                            operator_replacements.append(string[i]+string[end_up_index+1:end_index])#识别字母以及对应下标
+                                if end_up_index < len(string):#如果不是末尾
+                                    if string[end_up_index] == '_':#如果后面还有下标
+                                        if end_up_index+2 < len(string) and string[end_up_index+1] == '{':#非单字符下标
+                                            end_index = find_matching_braces(string, end_up_index + 2, '{}') - 1#找下标对应的}位置
+                                            operator_replacements.append(string[i]+string[end_up_index:end_index])#识别字母以及对应下标
                                             operator_replacements.append('^')#添加幂次标识
                                             operator_replacements.append(power_string)#添加幂次
-                                        else:
-                                            end_index = end_up_index + 2
+                                        else:#单字符下标
+                                            end_index = end_up_index + 1
                                             operator_replacements.append(string[i]+'_'+string[end_index])#识别字母以及对应下标
                                             operator_replacements.append('^')#添加幂次标识
-                                            operator_replacements.append(power_string)#添加幂次    
+                                            operator_replacements.append(power_string)#添加幂次
+                                    else:#如果后面没有下标
+                                        operator_replacements.append(string[i])#识别字母
+                                        operator_replacements.append('^')#添加幂次标识
+                                        operator_replacements.append(power_string)#添加幂次
+                                        end_index = end_up_index -1
+                                else:#如果上标结束之后超索引，说明字符已经结束
+                                    operator_replacements.append(string[i])#识别字母
+                                    operator_replacements.append('^')#添加幂次标识
+                                    operator_replacements.append(power_string)#添加幂次
+                                    end_index = end_up_index -1
                             case _:#没有上下标
                                 operator_replacements.append(string[i])#识别字母
                                 end_index = i
@@ -720,7 +1262,8 @@ def latex_to_list(string: str|list):
                 parts[parts.index(is_final_list(parts)[1])] = latex_to_list(is_final_list(parts)[1])#非最终列表，递归
                 continue
             else: return parts#最终列表，返回
-        except Exception as e:return e
+        except Exception as e:
+            raise e
     elif isinstance(string, list):  # 如果输入是一个列表
         try:
             pass
@@ -736,7 +1279,7 @@ def is_multi_operators(string: str):#判断是否为多运算块
         elif char in brace_pairs.values():
             if not stack or brace_pairs[stack.pop()] != char:
                 return -1  # 括号不匹配
-        if char in ['+','-','='] and not stack:  # 仅在栈为空时匹配
+        if char in ['+','-','='] and not stack and i!=0:  # 仅在栈为空时匹配
             return True
     return False
 
@@ -788,54 +1331,67 @@ def find_character_position(string: str, target: str, start_index=0):
             return i
     return -1
 
-import time
-import threading
+# import time
+# import threading
 
-class TimeoutError(Exception):
-    """自定义异常，用于处理超时情况"""
-    pass
+# class TimeoutError(Exception):
+#     """自定义异常，用于处理超时情况"""
+#     pass
 
-def _setup_special_with_timeout(string: str, timeout: float = 1.0):
-    """带超时功能的 _setup_special 函数"""
-    result = [None]  # 用于存储结果
-    error = [None]   # 用于存储异常
+# def _setup_special_with_timeout(string: str, timeout: float = 1.0):
+#     """带超时功能的 _setup_special 函数"""
+#     result = [None]  # 用于存储结果
+#     error = [None]   # 用于存储异常
 
-    def target():
-        try:
-            result[0] = _setup_special(string)
-        except Exception as e:
-            error[0] = e
+#     def target():
+#         try:
+#             result[0] = _setup_special(string)
+#         except Exception as e:
+#             error[0] = e
 
-    thread = threading.Thread(target=target)
-    thread.start()
-    thread.join(timeout)
+#     thread = threading.Thread(target=target)
+#     thread.start()
+#     thread.join(timeout)
 
-    if thread.is_alive():
-        thread.join()  # 确保线程结束
-        raise TimeoutError("处理时间超过1秒，可能进入死循环")
+#     if thread.is_alive():
+#         thread.join()  # 确保线程结束
+#         raise TimeoutError("处理时间超过1秒，可能进入死循环")
     
-    if error[0]:
-        raise error[0]
+#     if error[0]:
+#         raise error[0]
     
-    return result[0]
+#     return result[0]
 
 if __name__ == '__main__':
     expressions = [
-        r'\frac{\frac{abc}{xyz}+\ln(2)}{x_0^2}-\frac{\sqrt{abc}}{2}=\sqrt{abc}',
+        r'\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|}',
+        r"|2 + 3| + (4 - 5) \times \frac{6} {|7 + 8|}",
+        r"|a - b| + |c + d|",
+        r'\int_{|a|}^{|b|}{ |x| dx} + \int_{|c|}^{|d|}{ |\sin(x)| dx}',
+        r"\sum_{|i|=1}^{|n|}{ |i^2| }+ \prod_{|j|=1}^{|m|} {|j|}",
+        r"\sqrt[|3|]{|x|} + \sqrt{|y|} + \sqrt[|4|]{|z|}",
+        r"\ln(|2|) + \log_{|2|}(|8|) + \exp(|1|)",
+        r"\frac{|a - b| + |c + d|}{|e - f|} - \sqrt{|g|} ",
+        r"\int_{|a|}^{|b|} {|x| dx} + \int_{|c|}^{|d|} {|\sin(x)| dx }",
+        r"\frac{(|a - b| + (|c + d|))}{(|e - f|)} - \sqrt{(|g|)}",
+        r"\int_{(|a|)}^{(|b|)} {(|x|) dx} + \int_{(|c|)}^{(|d|)}{ (|\sin(x)|) dx}",
+        r"\frac{\sum_{i=1}^n{i^2}}{2} - \sqrt[3]{-\abs{5}} = \alpha_{0}",
+        r"\sum_{k=1}^\infty{\frac{k}{2^k}",
+        r"1E-5 + (x - y) - -1E-5 + (x + y)",
+        r"-2 + 3 - (4 - 5) * [6 / {7 + 8}]",  # 包含负号
+        r"\frac{-|a - b| + |c + d|}{|e - f|} - \sqrt{-|g|}",  # 包含负号
+        r"\int_{-|a|}^{|b|} {-|x| dx} + \int_{|c|}^{-|d|} {|\sin(-x)| dx}",  # 包含负号
+        r"\sum_{-|i|=1}^{|n|} -|i^2| + \prod_{|j|=1}^{-|m|} |j|",  # 包含负号
+        r"\sqrt[|-3|]{-|x|} + \sqrt{-|y|} / \sqrt[|4|]{-|z|}",  # 包含负号
+        r"\ln(-|2|) + \log_{-|2|}(|8|) + \exp(-|1|)",  # 包含负号
+        r"|(|x| + |y|)| - \frac{\abs{\ln(2)}}{3} = 0", 
+        r"5*6*(8+9\div56)",
         ]
-    
     # 运行测试
     for expr in expressions:
         try:
             result = latex_to_list(expr)
-            print(f"Expression: {expr}")
-            print(f"Results: {result}\n")
-        except TimeoutError as te:
-            print(f"Expression: {expr}")
-            print(f"Error: {te}\n")
-        except ValueError as ve:
-            print(f"Expression: {expr}")
-            print(f"Error: {ve}\n")
+            print(result)
         except Exception as e:
-            print(f"Expression: {expr}")
-            print(f"Unexpected Error: {e}\n")
+            print(f"Error processing '{expr}': {e}")
+            continue

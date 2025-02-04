@@ -1,6 +1,6 @@
 \frac{\frac{abc}{xyz}+\ln(2)}{x_0^2}-\frac{\sqrt{abc}}{2}=\overline{abc}+\sum_{i=1}^n{i^2+i}
 \int_0^{+\infty}{\frac{e^{x^2}\sin(ax^2)}{x^2}dx}
-\int_{\int_0^1sin(x)dx}^{+\infty}{e^{x^2}\sin(x^2)dx}
+\int_{\int_0^1{sin(x)dx}}^{+\infty}{e^{x^2}\sin(x^2)dx}
 \lim_{x\rightarrow0}{\lim_{y\rightarrow0}{\frac{xy}{x^2+y^2}}}
 \lim_{y\rightarrow0}{\frac{xy}{x^2+y^2}}
 \lim_{x\rightarrow\lim_{y\rightarrow0}{\frac{y}{1+y^2}}}{\frac{\sin(x)}{x}}
@@ -69,3 +69,26 @@ r"\sum_{i=1}^{n" ,      # 累加上限缺失右括号
 r"\gcd(56x^2,48x)",
 r"\lim_{x\rightarrow\infty}{\frac{x}{\sin(x)}}",
 r"25!",
+
+[['\\frac', [['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]], ['\\abs', ['e', '-', 'f']]], '-', ['\\sqrt', '2', ['\\abs', 'g']]]
+[['\\abs', ['2', '+', '3']], '+', [['4', '-', '5'], '\\times', '\\frac', '6', ['\\abs', ['7', '+', '8']]]]
+[['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]]
+[['\\int', ['\\abs', 'a'], ['\\abs', 'b'], 'x', ['\\abs', 'x']], '+', ['\\int', ['\\abs', 'c'], ['\\abs', 'd'], 'x', ['\\abs', ['\\sin', 'x']]]]
+[['\\sum', ['\\abs', 'i'], '1', ['\\abs', 'n'], ['\\abs', ['i', '^', '2']]], '+', ['\\prod', ['\\abs', 'j'], '1', ['\\abs', 'm'], ['\\abs', 'j']]]
+Error processing '\sqrt[|3|]{|x|} + \sqrt{|y|} + \sqrt[|4|]{|z|}': invalid expression
+[['\\ln', ['\\abs', '2']], '+', ['\\log', ['\\abs', '2'], '2', '\\times', ['\\abs', '8']], '+', ['\\exp', ['\\abs', '1']]]
+[['\\frac', [['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]], ['\\abs', ['e', '-', 'f']]], '-', ['\\sqrt', '2', ['\\abs', 'g']]]
+[['\\int', ['\\abs', 'a'], ['\\abs', 'b'], 'x', ['\\abs', 'x']], '+', ['\\int', ['\\abs', 'c'], ['\\abs', 'd'], 'x', ['\\abs', ['\\sin', 'x']]]]
+[['\\frac', [[['\\abs', ['a', '-', 'b']], '+', [['\\abs', ['c', '+', 'd']]]]], [['\\abs', ['e', '-', 'f']]]], '-', ['\\sqrt', '2', [['\\abs', 'g']]]]
+[['\\int', [['\\abs', 'a']], [['\\abs', 'b']], 'x', [['\\abs', 'x']]], '+', ['\\int', [['\\abs', 'c']], [['\\abs', 'd']], 'x', [['\\abs', ['\\sin', 'x']]]]]
+Error processing '\frac{\sum_{i=1}^n{i^2}}{2} - \sqrt[3]{-\abs{5}} = \alpha_{0}': invalid func abs
+Error processing '\sum_{k=1}^\infty{\frac{k}{2^k}': invalid up limit
+['1E-5', '+', [['x', '-', 'y']], '-', '-1E-5', '+', [['x', '+', 'y']]]
+['-2', '+', '3', '-', [['4', '-', '5'], '\\times', ['6', '\\div', ['7', '+', '8']]]]
+[['\\frac', ['-', ['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]], ['\\abs', ['e', '-', 'f']]], '-', ['\\sqrt', '2', ['-', '\\abs', 'g']]]
+[['\\int', ['-', '\\abs', 'a'], ['\\abs', 'b'], 'x', ['-', '\\abs', 'x']], '+', ['\\int', ['\\abs', 'c'], ['-', '\\abs', 'd'], 'x', ['\\abs', ['\\sin', ['-', 'x']]]]]
+Error processing '\sum_{-|i|=1}^{|n|} -|i^2| + \prod_{|j|=1}^{-|m|} |j|': invalid expression
+Error processing '\sqrt[|-3|]{-|x|} + \sqrt{-|y|} / \sqrt[|4|]{-|z|}': invalid expression
+[['\\ln', ['-', '\\abs', '2']], '+', ['\\log', ['-', '\\abs', '2'], '2', '\\times', ['\\abs', '8']], '+', ['\\exp', ['-', '\\abs', '1']]]
+Error processing '|(|x| + |y|)| - \frac{\abs{\ln(2)}}{3} = 0': invalid func abs
+['5', '\\times', '6', '\\times', ['8', '+', ['9', '\\div', '56']]]
