@@ -956,32 +956,36 @@ def _setup_special(string: str):
                             raise ValueError("你觉得这个计算器能算范畴论吗？(恼)")
                         case r'\max'|r'\sup':#最大值
                             operator_replacements.append(r'\max')#添加最大值标识
-                            if string[start_index] == '{':
-                                end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
-                                min_string = string[start_index + 2:end_index-1]#切出集合
-                                parts = min_string.split(',')#切出集合元素
-                                for part in parts:
-                                    operator_replacements.append(part)#识别每个数字
-                            else: raise ValueError("invalid number")#无表达式，立刻报错
-                            i = end_index#跳过原本函数结构
-                            if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append(r'\times')#添加乘法标识
+                            # if string[start_index] == '{':
+                            #     end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
+                            #     min_string = string[start_index + 2:end_index-1]#切出集合
+                            #     parts = min_string.split(',')#切出集合元素
+                            #     for part in parts:
+                            #         operator_replacements.append(part)#识别每个数字
+                            # else: raise ValueError("invalid number")#无表达式，立刻报错
+                            # i = end_index#跳过原本函数结构
+                            # if i < len(string):#如果不是运算块末尾
+                            #     operator_replacements.append(r'\times')#添加乘法标识
+                            i += 4#跳过最大值\max标识,且不加乘号，使得返回的下一个为列表
+                            continue
                         case r'\ker':
                             raise ValueError("暂不支持矩阵核运算")
                         case r'\Ran'|r'\Rnd'|r'\Ranint':
                             raise ValueError("暂不支持随机数运算")
                         case r'\inf'|r'\min':#最小值
                             operator_replacements.append(r'\min')#添加最小值标识
-                            if string[start_index] == '{':
-                                end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
-                                min_string = string[start_index + 2:end_index-1]#切出集合
-                                parts = min_string.split(',')#切出集合元素
-                                for part in parts:
-                                    operator_replacements.append(part)#识别每个数字
-                            else: raise ValueError("invalid number")#无表达式，立刻报错
-                            i = end_index#跳过原本函数结构
-                            if i < len(string):#如果不是运算块末尾
-                                operator_replacements.append(r'\times')#添加乘法标识
+                            # if string[start_index] == '{':
+                            #     end_index = find_matching_braces(string, start_index + 1, '{}')#找表达式的}对应位置
+                            #     min_string = string[start_index + 2:end_index-1]#切出集合
+                            #     parts = min_string.split(',')#切出集合元素
+                            #     for part in parts:
+                            #         operator_replacements.append(part)#识别每个数字
+                            # else: raise ValueError("invalid number")#无表达式，立刻报错
+                            # i = end_index#跳过原本函数结构
+                            # if i < len(string):#如果不是运算块末尾
+                            #     operator_replacements.append(r'\times')#添加乘法标识
+                            i += 4#跳过最小值\min标识,且不加乘号，使得返回的下一个为列表
+                            continue
                         case r'\Pr':
                             raise ValueError("请使用C,P,A上下标格式计算排列组合")
                         case r'\abs':
