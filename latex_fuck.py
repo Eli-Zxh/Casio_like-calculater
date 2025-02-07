@@ -10,12 +10,13 @@ import re
 为latextest.py文件，即latex转AST函数中，所不允许的非法字符
 """
 #region 列表保留值定义
-special_operators = [r'\frac',r'\sqrt',r'\int',r'\sum',r'\prod',r'\log',r'\lim',r'\limsup',r'\liminf',r'\sin',r'\cos',r'\tan',
+keep_operators = [r'\frac',r'\sqrt',r'\log',r'\lim',r'\limsup',r'\liminf',r'\sin',r'\cos',r'\tan',
                     r'\sec',r'\csc',r'\cot',r'\sinh',r'\cosh',r'\tanh',r'\arcsin',r'\arccos',r'\arctan',r'\exp',r'\ln',r'\lg',
                     r'\arg',r'\coth',r'\deg',r'\det',r'\dim',r'\gcd',r'\hom',r'\max',r'\sup',r'\ker',r'\inf',r'\min',r'\Pr',r'\abs']
+jundge_operators = [r'\int',r'\sum',r'\prod']
 operators = [r'+', r'-', r'=', r'\div', r'\times', r'\cdot',r'^']
 GH_letters = [r'\alpha',r'\beta',r'\chi',r'\delta',r'\epsilon',r'\eta',r'\gamma',r'\iota',
-                  r'\kappa',r'\lambda',r'\mu',r'\nu',r'ο',r'\omega',r'\phi',r'\pi',
+                  r'\kappa',r'\lambda',r'\mu',r'\nu',r'ο',r'\omega',r'\phi',
                   r'\psi',r'\rho',r'\sigma',r'\tau',r'\theta',r'upsilon',r'\xi',r'\zeta',
                   r'\digamma',r'\varepsilon',r'\varkappa',r'\varphi',r'\varpi',r'\varrho',r'\varsigma',r'\vartheta',
                   r'\Delta',r'\Gamma',r'\Lambda',r'\Omega',r'\Phi',r'\Pi',r'\Psi',r'\Sigma',
@@ -141,292 +142,355 @@ class numsqrt:#根式类
 SCIENTIFIC_NOTATION_REGEX = re.compile(
     r'^[+-]?(?:\d+\.?\d*|\.\d+)(?:[E][+-]?\d+)?$'  # 允许纯数字（如 123）和科学计数法
 )
-def cal_list(string: list,i:int = 0) -> str:#主计算函数，依据列表AST转为传递给各函数的值，最终结果值按照类的定义中最简结果
+def cal_by_step(string: list,i:int = 0) -> str:#逐步计算设计的主计算函数，符合自然的数学计算逻辑，但时间和空间复杂度较高
     # #第一步，判断列表级数，即列表深度
-    # max_depth = 0#列表最大深度初始化值
-    # stack = [(string,0)]#初始化栈，存储当前列表和当前列表的深度
-    # while stack:
-    #     current_list, current_depth = stack.pop()#取出栈顶元素
-    #     max_depth = max(max_depth, current_depth)
-    #     for element in current_list:#遍历当前列表中的元素
-    #         if isinstance(element, list):#如果元素是列表，则将列表和深度入栈
-    #             stack.append((element, current_depth + 1))
-    
-    #自定义的AST有一个优点是，可以之间从左到右直接读取元素，对于一个0级列表，从左到右就是运算顺序
+    max_depth = 0#列表最大深度初始化值
+    depth_list = []
+    stack = [(string,0)]#初始化栈，存储当前列表和当前列表的深度
+    while stack:
+        current_list, current_depth = stack.pop()#取出栈顶元素
+        max_depth = max(max_depth, current_depth)
+        for element in current_list:#遍历当前列表中的元素
+            if isinstance(element, list):#如果元素是列表，则将列表和深度入栈
+                stack.append((element, current_depth + 1))
     #第二步，当一个列表深度为0，即列表中均为最终元素，进行列表计算，返回字符串
-    
-    num = 1
-    # if max_depth == 0:#当列表深度为0，即列表中均为最终元素，进行列表计算
 
-    while i < len(string):#遍历列表中的元素
-        match string[i]:
-            #数字类型，返回
-            case _ if SCIENTIFIC_NOTATION_REGEX.match(string[i]):
-                if 'E' in string[i]:#判断是否为科学计数法,如果是，则浮点数运算
-                    num = float(string[i])
-                else:#其他数字类型，传入分数类进行精确计算
-                    num = numfrac(string[i])
-                if i == 0:#如果当前元素是第一个元素，则继续遍历，num传递
-                    i+=1
+def cal_list(string: list,i:int = 0) -> str:#主计算函数，依据列表AST转为传递给各函数的值，最终结果值按照类的定义中最简结果
+    #自定义的AST有一个优点是，可以之间从左到右直接读取元素，对于一个0级列表，从左到右就是运算顺序
+    num = 1
+    numcal,symbol = is_num_or_alpha(string)
+    if numcal:#为纯数字运算
+        while i < len(string):#遍历列表中的元素
+            match string[i]:
+                #数字类型，返回
+                case _ if SCIENTIFIC_NOTATION_REGEX.match(string[i]):
+                    if 'E' in string[i]:#判断是否为科学计数法,如果是，则浮点数运算
+                        num = float(string[i])
+                    else:#其他数字类型，传入分数类进行精确计算
+                        num = numfrac(string[i])
+                    if i == 0:#如果当前元素是第一个元素，则继续遍历，num传递
+                        i+=1
+                        continue
+                    else:return num, i+1#如果当前元素不是第一个元素，则返回当前数字
+                #运算符类型,递归
+                case r'\times'|r'cdot':
+                    cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
+                    num = num * cal_num#进行乘法运算
                     continue
-                else:return num, i+1#如果当前元素不是第一个元素，则返回当前数字
-            #运算符类型,递归
-            case r'\times'|r'cdot':
-                cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
-                num = num * cal_num#进行乘法运算
-                continue
-            case r'\div':
-                cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
-                num = num / cal_num#进行除法运算
-                continue
-            case r'+':
-                cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
-                num = num + cal_num#进行加法运算
-                continue
-            case r'-':
-                cal_num,i = cal_list(string, i+1)
-                num = num - cal_num#进行减法运算
-                continue
-            case r'^':
-                cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
-                num = num ** cal_num#进行乘方运算
-                continue
-            #第三类函数数字运算特殊类型，不用递归取数，直接传递并返回
-            case r'\lim':#极限，调用sympy库，返回数字和传递位置
-                vars,appro,expr = string[i+1],string[i+2],string[i+3]
-                num = cal_alpha('\lim',vars,appro,expr)
-                return num, i+4
-            case r'\int':#积分，调用sympy库
-                end,up,vars,expr = string[i+1],string[i+2],string[i+3],string[i+4]
-                num = cal_alpha('\int',end,up,vars,expr)
-                return num, i+5
-            case r'\sum':#求和，调用sympy库
-                end,up,vars,expr = string[i+1],string[i+2],string[i+3],string[i+4]
-                num = cal_alpha('\sum',end,up,vars,expr)
-                return num, i+5
-            case r'\prod':#累乘，调用sympy库
-                end,up,vars,expr = string[i+1],string[i+2],string[i+3],string[i+4]
-                num = cal_alpha('\prod',end,up,vars,expr)
-                return num, i+5
-            #第一类函数，递归取数，并返回
-            case r'\log':#对数，调用math库
-                end_num,ture_num = string[i+1],string[i+2]
-                if isinstance(end_num,list):#如果底数为列表，递归取数
-                    end_num = cal_list(end_num)
-                if isinstance(ture_num,list):#如果真数为列表，递归取数
-                    ture_num = cal_list(ture_num)
-                num = math.log(ture_num)/math.log(end_num)
-                return num, i+3
-            case r'\ln':#自然底数对数，调用math库
-                ture_num = string[i+1]
-                if isinstance(ture_num,list):#如果真数为列表，递归取数
-                    ture_num = cal_list(ture_num)
-                num = math.log(ture_num)
-                return num, i+2
-            case r'\factorial':#阶乘，直接计算，直接返回
-                num = 1
-                try:
-                    int_num = int(string[i+1])
-                except:raise ValueError('factorial must be a integer')
-                for i in range(1,int_num+1):
-                    num *= i
-                return num, i+2
-            case r'\max':#最大值，直接计算，直接返回
-                try:
-                    num_list = float(string[i+1])
-                except:raise ValueError('max must be a list')
-                num = max(num_list)
-                return num, i+2
-            case r'\min':#最小值，直接计算，直接返回
-                try:
-                    num_list = float(string[i+1])
-                except:raise ValueError('min must be a list')
-                num = min(num_list)
-                return num, i+2
-            case r'\sup':#上限，直接计算，直接返回
-                try:
-                    num_list = float(string[i+1])
-                except:raise ValueError('sup must be a list')
-                num = max(num_list)
-                return num, i+2
-            case r'\inf':#下限，直接计算，直接返回
-                try:
-                    num_list = float(string[i+1])
-                except:return ValueError('inf must be a list')
-                num = min(num_list)
-                return num, i+2
-            case r'\sqrt':#根号，调用类
-                times = string[i+1]
-                content = string[i+2]
-                if isinstance(times,list):#如果次数为列表，递归取数
-                    times = cal_list(times)
-                if isinstance(content,list):#如果内容是列表，递归取数
-                    content = cal_list(content)
-                num = numsqrt(content,times)
-                return num, i+3
-            case r'\frac':#分数，调用类
-                numerator,denominator = string[i+1],string[i+2]
-                if isinstance(numerator,list):#如果分子为列表，递归取数
-                    numerator = cal_list(numerator)
-                if isinstance(denominator,list):#如果分母为列表，递归取数
-                    denominator = cal_list(denominator)
-                num = numfrac(numerator,denominator)
-                return num, i+3
-            case r'\sin':#三角函数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = sin(degree)
-                return num, i+2
-            case r'\cos':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = cos(degree)
-                return num, i+2
-            case r'\tan':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = tan(degree)
-                return num, i+2
-            case r'\cot':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = cot(degree)
-                return num, i+2
-            case r'\sec':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = sec(degree)
-                return num, i+2
-            case r'\csc':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = csc(degree)
-                return num, i+2
-            case r'\arcsin':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = arcsin(degree)
-                return num, i+2
-            case r'\arccos':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = arccos(degree)
-                return num, i+2
-            case r'\arctan':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = arctan(degree)
-                return num, i+2
-            case r'\arccot':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = arccot(degree)
-                return num, i+2
-            case r'\arccsc':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = arccsc(degree)
-                return num, i+2
-            case r'\arcsec':
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = arcsec(degree)
-                return num, i+2
-            case r'\FACT':#分解质因子，调用轮式因子分解函数
-                degree = string[i+1]
-                try:
-                    num = int(degree)
-                except:raise ValueError('FACT must be a integer')
-                num = wheel_fact(num)
-                return num, i+2
-            case r'\gcd':#最大公约数，调用gcd算法
-                num1,num2 = int(string[i+1],string[i+2])
-                try:
-                    num = gcd(num1,num2)
-                except:raise ValueError('gcd must be two integer')
-                return num, i+3
-            case r'\sinh':#双曲正弦函数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = sinh(degree)
-                return num, i+2
-            case r'\cosh':#双曲余弦函数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = cosh(degree)
-                return num, i+2
-            case r'\tanh':#双曲正切函数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = math.tanh(degree)
-                return num, i+2
-            case r'\coth':#双曲余切函数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = math.coth(degree)
-                return num, i+2
-            case r'\lg':#以10为底的对数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = math.log(degree)/math.log(10)
-                return num, i+2
-            case r'arg':#角度函数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = arg(degree)
-                return num, i+2
-            case r'\deg':#角度函数，调用math库
-                degree = string[i+1]
-                if isinstance(degree,list):#如果角度为列表，递归取数
-                    degree = cal_list(degree)
-                num = deg(degree)
-                return num, i+2
-            case _:
-                raise ValueError('invalid function')
-    else:#当列表深度不为0，即列表中存在列表，进行列表嵌套计算
-        return num
+                case r'\div':
+                    cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
+                    num = num / cal_num#进行除法运算
+                    continue
+                case r'+':
+                    cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
+                    num = num + cal_num#进行加法运算
+                    continue
+                case r'-':
+                    cal_num,i = cal_list(string, i+1)
+                    num = num - cal_num#进行减法运算
+                    continue
+                case r'^':
+                    cal_num,i = cal_list(string, i+1)#递归，传递下一个计算数字，和遍历起始位置和更替位置
+                    num = num ** cal_num#进行乘方运算
+                    continue
+                #第三类函数数字运算特殊类型，不用递归取数，直接传递并返回
+                case r'\lim':#极限，调用sympy库，返回数字和传递位置
+                    vars,appro,expr = string[i+1],string[i+2],string[i+3]
+                    num = cal_alpha('\lim',vars,appro,expr)
+                    return num, i+4
+                case r'\int':#积分，调用sympy库
+                    end,up,vars,expr = string[i+1],string[i+2],string[i+3],string[i+4]
+                    num = cal_alpha('\int',end,up,vars,expr)
+                    return num, i+5
+                case r'\sum':#求和，调用sympy库
+                    end,up,vars,expr = string[i+1],string[i+2],string[i+3],string[i+4]
+                    num = cal_alpha('\sum',end,up,vars,expr)
+                    return num, i+5
+                case r'\prod':#累乘，调用sympy库
+                    end,up,vars,expr = string[i+1],string[i+2],string[i+3],string[i+4]
+                    num = cal_alpha('\prod',end,up,vars,expr)
+                    return num, i+5
+                #第一类函数，递归取数，并返回
+                case r'\log':#对数，调用math库
+                    end_num,ture_num = string[i+1],string[i+2]
+                    if isinstance(end_num,list):#如果底数为列表，递归取数
+                        end_num = cal_list(end_num)
+                    if isinstance(ture_num,list):#如果真数为列表，递归取数
+                        ture_num = cal_list(ture_num)
+                    num = math.log(ture_num)/math.log(end_num)
+                    return num, i+3
+                case r'\ln':#自然底数对数，调用math库
+                    ture_num = string[i+1]
+                    if isinstance(ture_num,list):#如果真数为列表，递归取数
+                        ture_num = cal_list(ture_num)
+                    num = math.log(ture_num)
+                    return num, i+2
+                case r'\factorial':#阶乘，直接计算，直接返回
+                    num = 1
+                    try:
+                        int_num = int(string[i+1])
+                    except:raise ValueError('factorial must be a integer')
+                    for i in range(1,int_num+1):
+                        num *= i
+                    return num, i+2
+                case r'\max':#最大值，直接计算，直接返回
+                    try:
+                        num_list = float(string[i+1])
+                    except:raise ValueError('max must be a list')
+                    num = max(num_list)
+                    return num, i+2
+                case r'\min':#最小值，直接计算，直接返回
+                    try:
+                        num_list = float(string[i+1])
+                    except:raise ValueError('min must be a list')
+                    num = min(num_list)
+                    return num, i+2
+                case r'\sup':#上限，直接计算，直接返回
+                    try:
+                        num_list = float(string[i+1])
+                    except:raise ValueError('sup must be a list')
+                    num = max(num_list)
+                    return num, i+2
+                case r'\inf':#下限，直接计算，直接返回
+                    try:
+                        num_list = float(string[i+1])
+                    except:return ValueError('inf must be a list')
+                    num = min(num_list)
+                    return num, i+2
+                case r'\sqrt':#根号，调用类
+                    times = string[i+1]
+                    content = string[i+2]
+                    if isinstance(times,list):#如果次数为列表，递归取数
+                        times = cal_list(times)
+                    if isinstance(content,list):#如果内容是列表，递归取数
+                        content = cal_list(content)
+                    num = numsqrt(content,times)
+                    return num, i+3
+                case r'\frac':#分数，调用类
+                    numerator,denominator = string[i+1],string[i+2]
+                    if isinstance(numerator,list):#如果分子为列表，递归取数
+                        numerator = cal_list(numerator)
+                    if isinstance(denominator,list):#如果分母为列表，递归取数
+                        denominator = cal_list(denominator)
+                    num = numfrac(numerator,denominator)
+                    return num, i+3
+                case r'\sin':#三角函数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = sin(degree)
+                    return num, i+2
+                case r'\cos':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = cos(degree)
+                    return num, i+2
+                case r'\tan':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = tan(degree)
+                    return num, i+2
+                case r'\cot':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = cot(degree)
+                    return num, i+2
+                case r'\sec':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = sec(degree)
+                    return num, i+2
+                case r'\csc':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = csc(degree)
+                    return num, i+2
+                case r'\arcsin':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = arcsin(degree)
+                    return num, i+2
+                case r'\arccos':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = arccos(degree)
+                    return num, i+2
+                case r'\arctan':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = arctan(degree)
+                    return num, i+2
+                case r'\arccot':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = arccot(degree)
+                    return num, i+2
+                case r'\arccsc':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = arccsc(degree)
+                    return num, i+2
+                case r'\arcsec':
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = arcsec(degree)
+                    return num, i+2
+                case r'\gcd':#最大公约数，调用gcd算法
+                    num1,num2 = int(string[i+1],string[i+2])
+                    try:
+                        num = gcd(num1,num2)
+                    except:raise ValueError('gcd must be two integer')
+                    return num, i+3
+                case r'\sinh':#双曲正弦函数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = sinh(degree)
+                    return num, i+2
+                case r'\cosh':#双曲余弦函数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = cosh(degree)
+                    return num, i+2
+                case r'\tanh':#双曲正切函数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = math.tanh(degree)
+                    return num, i+2
+                case r'\coth':#双曲余切函数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = math.coth(degree)
+                    return num, i+2
+                case r'\lg':#以10为底的对数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = math.log(degree)/math.log(10)
+                    return num, i+2
+                case r'arg':#角度函数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = arg(degree)
+                    return num, i+2
+                case r'\deg':#角度函数，调用math库
+                    degree = string[i+1]
+                    if isinstance(degree,list):#如果角度为列表，递归取数
+                        degree = cal_list(degree)
+                    num = deg(degree)
+                    return num, i+2
+                #特殊计算函数，特殊返回值
+                case r'\FACT':#分解质因子，调用轮式因子分解函数
+                    degree = string[i+1]
+                    try:
+                        num = int(degree)
+                    except:raise ValueError('FACT must be a integer')
+                    num = wheel_fact(num)
+                    return num, i+2
+                case _:
+                    raise ValueError('invalid function')
+    elif is_equation(string):#是方程，应当传参求解
+        expr = AST_to_expr(string)
+        num = cal_alpha(expr,symbol)
+        return num, 0
+    else:#多项式运算
+        expr = AST_to_expr(string)
+        return cal_alpha(expr,symbol),-1
     #第三步，递归处理每一个列表，当传入的主列表为0级，且已经满足最简条件判断，返回AST格式，仍为列表
 
-def is_num_or_alpha(string: list) -> bool:#判断是数字计算还是多项式计算，数字计算返回True，多项式计算返回False
-    pass
+def is_num_or_alpha(string: list) -> bool|str:#判断是数字计算还是多项式计算，数字计算返回True，多项式计算返回False
+    if isinstance(string,list):
+        i = 0
+        while i < len(string):
+            match string[i]:
+                case _ if isinstance(string[i],list):#列表，递归判断
+                    end,symbol = is_num_or_alpha(string[i])#传递变量
+                    if end:
+                        i+=1
+                        continue
+                    else:
+                        return False,symbol
+                case _ if string[i] in keep_operators:#数字运算符，返回仍是数字
+                    i+=1
+                    continue
+                case _ if SCIENTIFIC_NOTATION_REGEX.match(string[i]):#纯数字或者科学计数法
+                    i+=1
+                    continue
+                case 'e':#自然对数的底e
+                    i+=1
+                    continue
+                case '\pi':#圆周率π
+                    i+=1
+                    continue
+                case _ if string[i] in GH_letters:#希腊字母
+                    return False,string[i]
+                case _ if string[i].isalpha():#普通字母
+                    return False,string[i]
+                case _ if string[i] in jundge_operators:#特殊运算，判断是否为定值
+                    if is_num_or_alpha(string[i+1])[0] and is_num_or_alpha(string[i+2])[0]:
+                        pass
+                    else:
+                        return True,''
+                    i+=5#跳过特殊运算
+                    continue
+                case _:
+                    return False,string[i]
+        return True,''
+    elif isinstance(string,str):#当传入的列表为字符串，则进行字符串处理
+        if string in keep_operators:#数字运算符，返回仍是数字
+            return True,''
+        elif SCIENTIFIC_NOTATION_REGEX.match(string):
+            return True,''
+        elif string == 'e':
+            return True,''
+        elif string == '\pi':
+            return True,''
+        else:
+            return False,string
 
-def cal_num(string: str,figure: int) -> str:#数字计算，把最简结果也转换为浮点数
+def cal_num(string: numfrac,figure: int) -> str:#数字计算，把最简结果也转换为浮点数
     #1.最简结果转换为浮点数以及精确位数 2.把只能数值计算的部分调用scipy 进行单独计算
-    pass
+    return string.float()
 
-def cal_alpha(string: list) -> list:#多项式计算，计算为最简的表达式格式
+def cal_alpha(expr: str,symbol:str = 'x',type:int = 0) -> list:#多项式计算，计算为最简的表达式格式
     #分类：1.多项式计算 2.函数计算：求导，积分，求和，累乘 3.多项式赋值计算 4.函数赋值计算：定积分，定值求导，定值求和，定值累乘 5.方程计算：求解方程，图像绘制、图像显示
-    pass
+    x = sympy.Symbol(symbol)
+    expr_sympy = sympy.eval(expr)
+    if not type:
+        equation = sympy.Eq(expr_sympy, 0)
+        solution = sympy.solve(equation, x)
+        return solution
+    elif type == -1:
+        return sympy.simplify(expr_sympy)
 
-def is_final_output(string: str) -> bool:#判断是否为最终输出结果,是否为最简结果
+def is_equation(string: list) -> bool:#判断是否为方程
     # 1.判断数字计算结果是否为最终结果，2.多项式计算结果是否为最简结果
-    pass
-
+    if '=' in string: return True
+    else: return False
+#endregion
+#region 各数学运算函数
 def gcd(a: int, b: int) -> int:#求最大公约数
     if a > b: a, b = b, a
     while a != 0:
         a, b = b % a, a
     return b
 
-def wheel_fact(n:int) -> list:#轮式因子分解质因子分解算法
+def wheel_fact(n:int) -> str:#轮式因子分解质因子分解算法
     factors = []
     # 处理2和3这两个特殊情况
     while n % 2 == 0:
@@ -451,7 +515,7 @@ def wheel_fact(n:int) -> list:#轮式因子分解质因子分解算法
     if n > 1:
         factors.append(n)
     
-    return factors
+    return r'\times'.join(map(str, factors))
 
 def sin(x: float) -> float:
     return math.sin(x)
@@ -506,4 +570,13 @@ def arg(x: float) -> float:
 
 def deg(x: float) -> float:
     return math.degrees(x)
+#endregion
+
+
+#region 格式转换函数
+def AST_to_latex(operators: list) -> str:
+    pass
+
+def AST_to_expr(operators: list) -> str:
+    pass
 #endregion
