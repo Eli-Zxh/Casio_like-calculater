@@ -50,20 +50,149 @@ square_number = ['0','1','4','9','16','25','36','49','64','81','100','121','144'
 """
 """
 class numfrac:#分数类
-    def __init__(self,numerator: str,denominator: str) -> None:
-        self.numerator = numerator
-        self.denominator = denominator
+    def __init__(self,numerator: int|'nummix'|'numsqrt',denominator: int) -> None|'numfrac'|'numsqrt'|'nummix'|int|float:
+        match numerator:#分子判定，可以是整数，根式，根式混合类
+            case int()|nummix()|numsqrt():
+                self.numerator = int(numerator)#整数可以传入
+            case _:
+                return float(numerator/denominator)#其他情况转为浮点数
+        match denominator:#分母判定，只能为整数
+            case int():
+                self.denominator = int(denominator)
+            case numsqrt():#分母有理化
+                self.denominator = denominator.content*denominator.ratio
+                self.numerator = numerator*numsqrt(denominator.content**(denominator.times - 1),denominator.times,1)
+            case nummix():#分母有理化，仅对于二次根式
+                if denominator.content1.times == 2:
+                    if denominator.content2 is numsqrt() and denominator.content2.times == 2:
+                        self.denominator = denominator.content1.content**2 - denominator.content2.content**2
+                        self.numerator = numerator*(denominator.content1 - denominator.content2)
+                    else:return float(numerator/denominator)
+                else:return float(numerator/denominator)
+            case numfrac():#分母为分数，递归
+                return numfrac(numerator*denominator.numerator, denominator.denominator)
+            case _:
+                return float(numerator/denominator)#其他情况转为浮点数
+        if denominator == 0:
+            raise ValueError("invalid denominator")
         self.simplify()
-        self.is_final_output()
-        self.to_AST()
+         # 确保分母始终为正
+        if self.denominator < 0:
+            self.numerator *= -1
+            self.denominator *= -1
+        elif self.numerator == 0:return 0
+        if self.denominator == 1:return self.numerator
     
-    def simplify(self):#分数最简结果
+    def simplify(self):#分数最简结果,以及分母有理化
         #分数最简结果
-        if self.numerator.isdigit() and self.denominator.isdigit():
-            self.numerator = int(self.numerator)
-            self.denominator = int(self.denominator)
-            pass
-        pass#等待列表优化，不宜每次调用gcd函数判读
+        self.numerator,self.denominator = (self.numerator,self.denominator)/gcd(self.numerator,self.denominator)#等待gcd函数优化
+        return numfrac(self.numerator,self.denominator)#等待列表优化，不宜每次调用gcd函数判读
+
+    def __value__(self):#分数值
+        return self.numerator/self.denominator
+
+    def __add__(self,other):#加法
+        match other:
+            case numfrac():
+                new_num = self.numerator * other.denominator + other.numerator * self.denominator
+                new_den = self.denominator * other.denominator
+            case int():
+                new_num = self.numerator + other * self.denominator
+                new_den = self.denominator
+            case float():
+                return self.__value__() + other
+            case nummix():#混合类
+                new_num = self.numerator + other * self.denominator
+                new_den = self.denominator
+            case _:raise TypeError(f"{type(other)} can't be added to numfrac")
+        return numfrac(new_num,new_den)
+
+    def __radd__(self,other):#右加法
+        if other is int():
+            return numfrac(self.numerator + other * self.denominator,self.denominator)
+        elif other is float():
+            return self.__value__() + other
+        else:
+            raise TypeError(f"{type(other)} can't be added to numfrac")
+
+    def __sub__(self,other):#减法
+        other = other*-1
+        return self.__add__(other)
+
+    def __rsub__(self,other):#右减法
+        if other is int():
+            return numfrac(other * self.denominator - self.numerator,self.denominator)
+        elif other is float():
+            return other - self.__value__
+        else:
+            raise TypeError(f"{type(other)} can't be added to numfrac")
+    
+    def __mul__(self,other):#乘法
+        match other:
+            case numfrac():
+                new_num = self.numerator * other.numerator
+                new_den = self.denominator * other.denominator
+            case int()|numsqrt()|nummix():#
+                new_num = self.numerator * other
+                new_den = self.denominator
+            case float():#浮点数
+                return float(self.__value__ * other)
+        return numfrac(new_num,new_den)
+
+    def __rmul__(self,other):#右乘法
+        return self.__mul__(other)
+    
+    def __truediv__(self,other):#除法
+        other = numfrac(1,other)
+        return self * other
+
+    def __rtruediv__(self,other):#右除法
+        self = numfrac(1,self)
+        return self * other
+
+    def __pow__(self,other):#指数运算
+        match other:
+            case int():
+                new_num = self.numerator ** other
+                new_den = self.denominator ** other
+            case nummix()|numfrac()|numsqrt():#分数
+                return float(self.__value__ ** other.__value__)
+            case float():#浮点数
+                return float(self.__value__ ** other)
+            case _:
+                raise TypeError(f"{type(other)} can't be used in power")
+        return numfrac(new_num,new_den)
+
+    # def __rpow__(self, other):
+    #     if other is int():
+    #         return numfrac(self.__value__ ** other,1)
+
+    def __lt__(self, other):
+        match other:
+            case numfrac()|nummix()|numsqrt():#分数
+                return self.__value__ < other.__value__
+            case float()|int():#浮点数
+                return self.__value__ < other
+            case _:
+                raise TypeError(f"{type(other)} can't be used in compare")
+    
+    def __gt__(self, other):
+        match other:
+            case numfrac()|nummix()|numsqrt():#分数
+                return self.__value__ > other.__value__
+            case float()|int():#浮点数
+                return self.__value__ > other
+            case _:
+                raise TypeError(f"{type(other)} can't be used in compare")
+
+    def __eq__(self, other):
+        match other:
+            case numfrac()|nummix()|numsqrt():#分数
+                return self.__value__ == other.__value__
+            case float()|int():#浮点数
+                return self.__value__ == other
+            case _:
+                raise TypeError(f"{type(other)} can't be used in compare")
 
     def is_final_output(self):#判断是否为最终输出结果,是否为最简结果
         if self.content.isdigit() and self.times.isdigit():
@@ -73,24 +202,45 @@ class numfrac:#分数类
                 return 0#不是最简结果
         else: return -1#不应为分数类
 
-    def to_latex(self):#latex输出函数
-        return r'\frac{'+self.numerator+r'}{'+self.denominator+r'}'
+    def __repr__(self):#latex输出函数
+        return r'\frac{'+str(self.numerator)+r'}{'+str(self.denominator)+r'}'
+
+    def __str__(self):#直接输出函数
+        return f"{str(self.numerator)}/{str(self.denominator)}"
     
     def to_AST(self):#AST输出函数
-        return [r'\frac',self.numerator,self.denominator]
+        return [r'\frac',str(self.numerator),str(self.denominator)]
     
 class numsqrt:#根式类
-    def __init__(self,content: str,times: str) -> None:
-        self.content = content
-        self.times = times
-        self.simplify()
-        self.is_final_output()
-        self.to_AST()
-        self.to_latex()
+    def __init__(self,content: int,times: int = 2,ratio :int|'numfrac' = 1) -> None:#默认次方为2，系数为1
+        match content,times,ratio:
+            case int(),int(),int():
+                if self.times == 0:return int(self.ratio)#幂次为0，则返回系数
+                elif self.times == 1:return int(self.ratio * self.content)#幂次为1，则返回系数乘以根式
+                self.content = content
+                self.times = times
+                self.ratio = ratio
+                self.simplify()
+            case _,_,numfrac():
+                self.content = content
+                self.times = times
+                self.ratio = ratio.numerator
+                self.simplify()
+                return numfrac(self, ratio.denominator)
+            case _ if any(isinstance(i,float) for i in (content,times,ratio)):
+                return float(self.content**(1/self.times) * self.ratio)
     
     def simplify(self):#根式最简结果
         #根式最简结果
-        pass#等待列表优化，不宜每次调用gcd函数判读
+        quadraticList = []#等待列表优化，不宜每次调用gcd函数判读
+        for i in range(1,int(self.content ** (1/self.times))+1):#返回一个由1到content的times次递归列表
+            quadraticList.append(i**self.times)
+        for i in quadraticList[::-1]:#循环每一个平方或者立方数
+            if self.content / i == self.content // i:#如果能整除
+                self.content = i#格式内替换为i
+                self.ratio *= self.content / i#系数乘以倍数
+                break
+        return numsqrt(self.content,self.times,self.ratio)
 
     def is_final_output(self):#判断是否为最终输出结果,是否为最简结果
         if self.content.isdigit() and self.times.isdigit():
@@ -100,14 +250,234 @@ class numsqrt:#根式类
                 return 0#不是最简结果
         else: return -1#不应为根式类
 
+    def __value__(self):#根式值
+        return self.ratio * self.content ** (1/self.times)
+
+    def __add__(self,other):#加法
+        match other:
+            case numsqrt():#根式加法
+                if self.content == other.content and self.times == other.times:#如果根式相同
+                    return numsqrt(self.content,self.times,self.ratio+other.ratio)#系数相加
+                else: return nummix(self,other)
+            case int():#根式加整数
+                return nummix(self,other)
+            case numfrac():#根式加分数
+                return numfrac(other.numerator+self*other.denominator,other.denominator)
+            case float():#根式加浮点数
+                return float(self.value + other)
+            case nummix():#根式混合运算
+                return other.__add__(self)#调用mix类的加法函数
+            case _:raise TypeError(f"{isinstance(other)} can't add with a numfrac")
+        #不能进行加法,抛出typeerror
+    
+    def __sub__(self,other):#减法
+        other = other*-1#取相反数
+        return self.__add__(other)#计算加法
+    
+    def __mul__(self,other):#乘法
+        match other:
+            case numsqrt():#根式乘法
+                if self.times == other.times:#如果根次相同
+                    return numsqrt(self.content*other.content,self.times,self.ratio*other.ratio)#返回根式
+                else:#根式次数不同，计算根式乘法
+                    times = self.times * other.times/gcd(self.times,other.times)#最小公倍数
+                    return numsqrt(self.content**(times/self.times)*other.content**(times/other.times),times,self.ratio*other.ratio)
+            case numfrac():#如果other为分数
+                return numfrac(self*other.numerator,other.denominator)#递归调用，分数类的分子不为分数类，不会死循环
+            case int():#如果other为整数
+                return numsqrt(self.content,self.times,self.ratio*other)#返回根式
+            case float():#如果other为浮点数
+                return float(self.content**(1/self.times)*self.ratio*other)#返回浮点数
+            case nummix():#如果other为混合类
+                return other.__mul__(self)#调用mix类的乘法函数
+            case _:raise TypeError(f"{isinstance(other)} can't point with a numfrac")
+    
+    def __truediv__(self,other):#除法
+        other = numfrac(1,other)#取倒数，递归调用分数类初始化函数
+        return self.__mul__(other)
+
+    def __pow__(self, other):#幂
+        match other:
+            case int():
+                if other/self.content == other//self.content:#如果能结束根式，则直接返回整数类
+                    return int(self.content**(other/self.content)*self.ratio**other)
+                else:return numsqrt(self.content**other,self.times,self.ratio**other)
+            case float():#幂次不是整数，直接转为浮点数计算
+                return float(self.__value__**other)
+            case _:#幂次不是整数，直接转为浮点数计算
+                return float(self.__value__**other.__value__)
+    
+    def __lt__(self,other):#小于比较函数
+        match other:
+            case numfrac()|nummix()|numsqrt():#other是分数或分数根
+                return self.__value__<other.__value__
+            case float():#other是浮点数
+                return self.__value__<other
+            case _:#other不是分数或分数根，直接转为浮点数比较
+                return self.__value__<float(other)
+
+    def __gt__(self,other):#重载>运算符
+        match other:
+            case numfrac()|nummix()|numsqrt():#other是分数或分数根
+                return self.__value__>other.__value__
+            case float():#other是浮点数
+                return self.__value__>other
+            case _:#other不是分数或分数根，直接转为浮点数比较
+                return self.__value__>float(other)
+
+    def __ge__(self,other):#大于等于
+        match other:
+            case numfrac()|nummix()|numsqrt():#other是分数或分数根
+                return self.__value__>=other.__value__
+            case float():#other是浮点数
+                return self.__value__>=other
+            case _:#other不是分数或分数根，直接转为浮点数比较
+                return self.__value__>=float(other)
+
+    def __le__(self, other):#<=
+        match other:
+            case numfrac()|nummix()|numsqrt():#other是分数或分数根
+                return self.__value__<=other.__value__
+            case float():#other是浮点数
+                return self.__value__<=other
+            case _:#other不是分数或分数根，直接转为浮点数比较
+                return self.__value__<=float(other)
+
+    def __eq__(self, other) -> bool:#==重载函数
+        if other is numsqrt():
+            if self.times == other.times and self.content == other.content and self.ratio == other.ratio:
+                return True
+        else:
+            if self.__value__ == other:
+                return True
+        return False
+
     def to_latex(self):#latex输出函数
         if self.times == '2':#二次根式输出latex
             return r'\sqrt{'+self.content+r'}'
         else:#三次根式输出latex
             return r'\sqrt['+self.times+r']{'+self.content+r'}'
     
+    def __str__(self):#直接输出函数
+        return f"{str(self.content)}^{str(self.times)}"
     def to_AST(self):#AST输出函数
         return [r'\sqrt',self.times,self.content]#根式输出AST
+
+class nummix:#根式混合类，目前只支持两个的混合，其他类型会被转为浮点数直接计算
+    def __init__(self,content1: 'numsqrt',content2: 'int'|'numsqrt'):
+        self.content1 = content1
+        self.content2 = content2
+        self.simplify()
+    
+    def simplify(self):#混合式最简结果
+        #混合式最简结果
+        if self.content1.isinstance(numsqrt) and self.content2.isinstance(numsqrt):#如果都为根式
+            if self.content1.times == self.content2.times and self.content1.content == self.content2.content:#如果根式相同
+                return numsqrt(self.content1.content,self.content1.times,self.content1.ratio+self.content2.ratio)#返回根式
+        return self
+
+    def __value__(self):#直接输出函数
+        if self.content2 is int:#调用根式计算
+            return float(self.content1.__value__ + self.content2)
+        else:
+            return float(self.content1.__value__ + self.content2.__value__)
+    
+    def __add__(self,other):#加法运算
+        match other:
+            case numsqrt():
+                if self.content1 is numsqrt and self.content1.times == other.times and self.content1.content == other.content:#如果根式相同
+                    self.content1 = numsqrt(self.content1.content,self.content1.times,self.content1.ratio+other.ratio)#返回根式
+                    return self
+                elif self.content2 is numsqrt and self.content2.times == other.times and self.content2.content == other.content:
+                    self.content2 = numsqrt(self.content2.content,self.content2.times,self.content2.ratio+other.ratio)#返回根式
+                    return self
+                else: return float(self.__value__ + other.__value__)#返回浮点数计算
+            case int():
+                if self.content2 is int():
+                    self.content2 = int(self.content2 + other)#返回整数计算
+                    return self
+                else: return float(self.__value__ + other)#返回浮点数计算
+            case float():
+                return float(self.__value__ + other)#返回浮点数计算
+            case numfrac():
+                return numfrac(self*other.denominator + other.numerator, other.denominator)#返回分数计算
+            case nummix():#返回混合数计算
+                return self.content1 + self.content2 + other.content1 + other.content2#递归调用根式计算类函数
+            case _:raise TypeError(f"{type(other)} can't be added to nummix")
+
+    def __sub__(self, other):
+        other *= -1#取相反数
+        return self + other#调用加法函数
+
+    def __mul__(self, other):#乘法函数
+        match other:#判断other类型
+            case nummix():#返回混合数计算
+                return self.content1 * other.content1 + self.content1 * other.content2 + self.content2 * other.content1 + self.content2 * other.content2#递归调用根式计算类函数
+            case int():
+                return self.content1 * other + self.content2 * other#调用根式类乘法
+            case float():
+                return self.__value__*other
+            case numfrac():#返回分数计算
+                return numfrac(self*other.numerator,other.denominator)#递归
+            case numsqrt():#返回根式计算
+                return self.content1*other+self.content2*other#调用根式类乘法
+            case _:raise TypeError(f"{type(other)} can't be multiplied with nummix")
+    
+    def __truediv__(self,other):#除法
+        other = numfrac(1,other)#取倒数
+        return self*other#调用乘法
+
+    def __pow__(self,other):#指数
+        match other:
+            case int():#返回根式计算
+                if other == 2:
+                    return self.content1**2+self.content2**2+2*self.content1*self.content2#调用根式计算
+                else:
+                    return self.__value__**other#浮点数计算
+            case float():#返回浮点数计算
+                return self.__value__**other#浮点数计算
+            case nummix()|numfrac()|numsqrt():
+                return self.__value__**other.__values__#浮点数计算
+            case _:raise TypeError(f"{type(other)} can't be powered with nummix")
+    
+    def __lt__(self,other):#小于函数
+        match other:
+            case int()|float():#返回浮点数计算
+                return self.__value__<other#浮点数计算
+            case nummix()|numfrac()|numsqrt():
+                return self.__value__<other.__values__#浮点数计算
+            case _:raise TypeError(f"{type(other)} can't be compared with nummix")
+
+    def __gt__(self,other):#大于函数
+        match other:
+            case int()|float():#返回浮点数计算
+                return self.__value__>other#浮点数计算
+            case nummix()|numfrac()|numsqrt():
+                return self.__value__>other.__values__#浮点数计算
+            case _:raise TypeError(f"{type(other)} can't be compared withnummix")
+
+    def __eq__(self,other):#等于函数
+        match other:
+            case int()|float():#返回浮点数计算
+                return self.__value__==other#浮点数计算
+            case nummix()|numfrac()|numsqrt():
+                return self.__value__==other.__values__#浮点数计算
+            case _:raise TypeError(f"{type(other)} can't be compared withnummix")
+
+    def __le__(self,other):
+        return self < other or self == other
+
+    def __ge__(self,other):
+        return self > other or self == other
+
+    def __str__(self):#直接输出函数
+        return f"{str(self.content1)}"+'+'+f"{str(self.content2)}"
+
+    def to_latex(self):#latex输出函数
+        return self.content1.to_latex()+'+'+self.content2.to_latex()#混合式输出latex
+    
+    def to_AST(self):#AST输出函数
+        return [str(self.content1),'+',str(self.content2)]#混合式输出AST
 
 # class alphabet:#表达式类
 #     def __init__(self,content: str) -> None:
@@ -155,7 +525,7 @@ def cal_by_step(string: list,i:int = 0) -> str:#逐步计算设计的主计算�
                 stack.append((element, current_depth + 1))
     #第二步，当一个列表深度为0，即列表中均为最终元素，进行列表计算，返回字符串
 
-def cal_list(string: list,i:int = 0) -> str:#主计算函数，依据列表AST转为传递给各函数的值，最终结果值按照类的定义中最简结果
+def cal_list(string: list,i:int = 0) -> numfrac|numsqrt|nummix|int|float:#主计算函数，依据列表AST转为传递给各函数的值，最终结果值按照类的定义中最简结果
     #自定义的AST有一个优点是，可以之间从左到右直接读取元素，对于一个0级列表，从左到右就是运算顺序
     num = 1
     numcal,symbol = is_num_or_alpha(string)
@@ -261,89 +631,89 @@ def cal_list(string: list,i:int = 0) -> str:#主计算函数，依据列表AST�
                     times = string[i+1]
                     content = string[i+2]
                     if isinstance(times,list):#如果次数为列表，递归取数
-                        times = cal_list(times)
+                        times = cal_list(times)[0]
                     if isinstance(content,list):#如果内容是列表，递归取数
-                        content = cal_list(content)
+                        content = cal_list(content)[0]
                     num = numsqrt(content,times)
                     return num, i+3
                 case r'\frac':#分数，调用类
                     numerator,denominator = string[i+1],string[i+2]
                     if isinstance(numerator,list):#如果分子为列表，递归取数
-                        numerator = cal_list(numerator)
+                        numerator = cal_list(numerator)[0]
                     if isinstance(denominator,list):#如果分母为列表，递归取数
-                        denominator = cal_list(denominator)
+                        denominator = cal_list(denominator)[0]
                     num = numfrac(numerator,denominator)
                     return num, i+3
                 case r'\sin':#三角函数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = sin(degree)
                     return num, i+2
                 case r'\cos':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = cos(degree)
                     return num, i+2
                 case r'\tan':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = tan(degree)
                     return num, i+2
                 case r'\cot':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = cot(degree)
                     return num, i+2
                 case r'\sec':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = sec(degree)
                     return num, i+2
                 case r'\csc':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = csc(degree)
                     return num, i+2
                 case r'\arcsin':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = arcsin(degree)
                     return num, i+2
                 case r'\arccos':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = arccos(degree)
                     return num, i+2
                 case r'\arctan':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = arctan(degree)
                     return num, i+2
                 case r'\arccot':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = arccot(degree)
                     return num, i+2
                 case r'\arccsc':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = arccsc(degree)
                     return num, i+2
                 case r'\arcsec':
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = arcsec(degree)
                     return num, i+2
                 case r'\gcd':#最大公约数，调用gcd算法
@@ -355,43 +725,43 @@ def cal_list(string: list,i:int = 0) -> str:#主计算函数，依据列表AST�
                 case r'\sinh':#双曲正弦函数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = sinh(degree)
                     return num, i+2
                 case r'\cosh':#双曲余弦函数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = cosh(degree)
                     return num, i+2
                 case r'\tanh':#双曲正切函数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = math.tanh(degree)
                     return num, i+2
                 case r'\coth':#双曲余切函数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = math.coth(degree)
                     return num, i+2
                 case r'\lg':#以10为底的对数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = math.log(degree)/math.log(10)
                     return num, i+2
                 case r'arg':#角度函数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = arg(degree)
                     return num, i+2
                 case r'\deg':#角度函数，调用math库
                     degree = string[i+1]
                     if isinstance(degree,list):#如果角度为列表，递归取数
-                        degree = cal_list(degree)
+                        degree = cal_list(degree)[0]
                     num = deg(degree)
                     return num, i+2
                 #特殊计算函数，特殊返回值
@@ -574,9 +944,165 @@ def deg(x: float) -> float:
 
 
 #region 格式转换函数
-def AST_to_latex(operators: list) -> str:
-    pass
+def AST_to_latex(operators: list|str) -> str:#AST转换为latex,基本转换思路等同于阅读思路，从左到右阅读转换,递归+遍历算法
+    latex_text = ''
+    i = 0
+    if isinstance(operators, list):#当传入的列表为列表，对每个元素遍历
+        while i < len(operators):
+            operator = operators[i]
+            match operator:
+                case list():#列表，递归
+                    text = '(' + AST_to_latex(operator) + ')'
+                    latex_text += text
+                    i+=1
+                    continue
+                case r'\frac':#分数
+                    text = r'\frac{' + AST_to_latex(operators[i+1])[1:-1] + '}{' + AST_to_latex(operators[i+2])[1:-1] + '}'
+                    latex_text += text
+                    i+=3
+                    continue
+                case r'\sqrt':#根号
+                    text = r'\sqrt[' + AST_to_latex(operators[i+1])[1:-1] + ']{' + AST_to_latex(operators[i+2])[1:-1] + '}'
+                    latex_text += text
+                    i+=4
+                    continue
+                case r'\int':#积分
+                    text = r'\int_{' + AST_to_latex(operators[i+1])[1:-1] +'}'+ '^{' + AST_to_latex(operators[i+2])[1:-1] + '}{' + AST_to_latex(operators[i+4])[1:-1] + 'd' + AST_to_latex(operators[i+3])[1:-1] + '}'
+                    latex_text += text
+                    i+=5
+                    continue
+                case r'\sum':#求和
+                    text = r'\sum_{' + AST_to_latex(operators[i+3])[1:-1] + '=' + AST_to_latex(operators[i+1])[1:-1] +'}'+ '^{' + AST_to_latex(operators[i+2])[1:-1] + '}{' + 'd' + AST_to_latex(operators[i+4])[1:-1] + '}'
+                    latex_text += text
+                    i+=5
+                    continue
+                case r'\prod':#累乘
+                    text = r'\prod_{' + AST_to_latex(operators[i+3])[1:-1] + '=' + AST_to_latex(operators[i+1])[1:-1] +'}'+ '^{' + AST_to_latex(operators[i+2])[1:-1] + '}{' + 'd' + AST_to_latex(operators[i+4])[1:-1] + '}'
+                    latex_text += text
+                    i+=5
+                    continue
+                case r'\log':#普通对数
+                    text = r'\log_{' + AST_to_latex(operators[i+1])[1:-1] + '}{' + AST_to_latex(operators[i+2])[1:-1] + '}'
+                    latex_text += text
+                    i+=3
+                    continue
+                case r'\lim':#极限
+                    text = r'\lim_{' + AST_to_latex(operators[i+1])[1:-1] + r'\rightarrow' + AST_to_latex(operators[i+2])[1:-1] + '}{' + AST_to_latex(operators[i+3])[1:-1] + '}'
+                    latex_text += text
+                    i+=2
+                    continue
+                case r'\sin'|r'\cos'|r'\tan'|r'\csc'|r'\sec'|r'\cot'|r'\arcsin'|r'\arccos'|r'\arctan'|r'\arccot'|r'\arccsc'|r'\arcsec'|r'\sinh'|r'\cosh'|r'\tanh'|r'\coth'|r'\arg'|r'\deg':#普通函数，单变量，可直接添加
+                    text = operator + '(' + AST_to_latex(operators[i+1])[1:-1] + ')'
+                    latex_text += text
+                    i+=2
+                    continue
+                case 'C'|'P'|'A':#组合数学函数
+                    text = operator + '_{' + AST_to_latex(operators[i+1])[1:-1] + '}^{' + AST_to_latex(operators[i+2])[1:-1] + '}'
+                    latex_text += text
+                    i+=3
+                    continue
+                case r'\factorial':#阶乘
+                    text = AST_to_latex(operators[i+1])[1:-1] + '!'
+                    latex_text += text
+                    i+=2
+                    continue
+                case r'\abs':#绝对值
+                    text = r'\abs{' + AST_to_latex(operators[i+1])[1:-1] + '}'
+                    latex_text += text
+                    i+=2
+                    continue
+                case _:#其他情况，包括幂指数，数字等等，均可直接添加
+                    text = operator
+                    latex_text += text
+                    i+=1
+                    continue
+    if isinstance(operators, str):#为了递归添加的字符串处理，字符串直接返回
+        latex_text += '(' + operators + ')'
+    return latex_text
 
-def AST_to_expr(operators: list) -> str:
-    pass
+def AST_to_expr(operators: list) -> str:#AST转换为表达式，基本转换思路等同于阅读思路，从左到右阅读转换,递归+遍历算法
+    expr_text = ''
+    i = 0
+    if isinstance(operators, list):#当传入的列表为列表，对每个元素遍历
+        while i < len(operators):
+            operator = operators[i]
+            match operator:
+                case list():#列表，递归
+                    text = '(' + AST_to_expr(operator) + ')'
+                    expr_text += text
+                    i+=1
+                    continue
+                case r'\frac':#分数
+                    text = AST_to_expr(operators[i+1]) + '/' + AST_to_expr(operators[i+2])
+                    expr_text += text
+                    i+=3
+                    continue
+                case r'\sqrt':#根号
+                    text = AST_to_expr(operators[i+2]) + '^' + AST_to_expr(operators[i+1])
+                    expr_text += text
+                    i+=3
+                    continue
+                case r'\times':#乘号
+                    text = '*'
+                    expr_text += text
+                    i+=1
+                    continue
+                case r'\div':#除号
+                    text = '/'
+                    expr_text += text
+                    i+=1
+                    continue
+                case r'\cdot':#点乘
+                    text = '*'#存疑，暂时传*
+                    expr_text += text
+                    i+=1
+                    continue
+                case r'\sin'|r'\cos'|r'\tan'|r'\csc'|r'\sec'|r'\cot'|r'\arcsin'|r'\arccos'|r'\arctan'|r'\arccot'|r'\arccsc'|r'\arcsec'|r'\sinh'|r'\cosh'|r'\tanh'|r'\coth'|r'\arg'|r'\deg':#普通函数，单变量，可直接添加
+                    text = operator[1:] + AST_to_expr(operators[i+1])
+                    expr_text += text
+                    i+=2
+                    continue
+                case r'\abs':#绝对值
+                    text = '|' + AST_to_expr(operators[i+1]) + '|'
+                    expr_text += text
+                    i+=2
+                    continue
+                case r'\factorial':#阶乘
+                    text = AST_to_expr(operators[i+1]) + '!'
+                    expr_text += text
+                    i+=2
+                    continue
+                case _:#其他情况，包括幂指数，数字等等，均可直接添加
+                    text = operator
+                    expr_text += text
+                    i+=1
+                    continue
+    if isinstance(operators, str):#为了递归添加的字符串处理，字符串直接返回
+        expr_text += '(' + operators + ')'
+    return expr_text
+
+#endregion
+
+#region 测试
+if __name__ == '__main__':
+    expr = [
+        [['\\frac', [['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]], ['\\abs', ['e', '-', 'f']]], '-', ['\\sqrt', '2', ['\\abs', 'g']]],
+        [['\\abs', ['2', '+', '3']], '+', [['4', '-', '5'], '\\times', '\\frac', '6', ['\\abs', ['7', '+', '8']]]],
+        [['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]],
+        [['\\int', ['\\abs', 'a'], ['\\abs', 'b'], 'x', ['\\abs', 'x']], '+', ['\\int', ['\\abs', 'c'], ['\\abs', 'd'], 'x', ['\\abs', ['\\sin', 'x']]]],
+        [['\\sum', ['\\abs', 'i'], '1', ['\\abs', 'n'], ['\\abs', ['i', '^', '2']]], '+', ['\\prod', ['\\abs', 'j'], '1', ['\\abs', 'm'], ['\\abs', 'j']]],
+        [['\\ln', ['\\abs', '2']], '+', ['\\log', ['\\abs', '2'], '2', '\\times', ['\\abs', '8']], '+', ['\\exp', ['\\abs', '1']]],
+        [['\\frac', [['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]], ['\\abs', ['e', '-', 'f']]], '-', ['\\sqrt', '2', ['\\abs', 'g']]],
+        [['\\int', ['\\abs', 'a'], ['\\abs', 'b'], 'x', ['\\abs', 'x']], '+', ['\\int', ['\\abs', 'c'], ['\\abs', 'd'], 'x', ['\\abs', ['\\sin', 'x']]]],
+        [['\\frac', [[['\\abs', ['a', '-', 'b']], '+', [['\\abs', ['c', '+', 'd']]]]], [['\\abs', ['e', '-', 'f']]]], '-', ['\\sqrt', '2', [['\\abs', 'g']]]],
+        [['\\int', [['\\abs', 'a']], [['\\abs', 'b']], 'x', [['\\abs', 'x']]], '+', ['\\int', [['\\abs', 'c']], [['\\abs', 'd']], 'x', [['\\abs', ['\\sin', 'x']]]]],
+        ['1E-5', '+', [['x', '-', 'y']], '-', '-1E-5', '+', [['x', '+', 'y']]],
+        ['-2', '+', '3', '-', [['4', '-', '5'], '\\times', ['6', '\\div', ['7', '+', '8']]]],
+        [['\\frac', ['-', ['\\abs', ['a', '-', 'b']], '+', ['\\abs', ['c', '+', 'd']]], ['\\abs', ['e', '-', 'f']]], '-', ['\\sqrt', '2', ['-', '\\abs', 'g']]],
+        [['\\int', ['-', '\\abs', 'a'], ['\\abs', 'b'], 'x', ['-', '\\abs', 'x']], '+', ['\\int', ['\\abs', 'c'], ['-', '\\abs', 'd'], 'x', ['\\abs', ['\\sin', ['-', 'x']]]]],
+        [['\\ln', ['-', '\\abs', '2']], '+', ['\\log', ['-', '\\abs', '2'], '2', '\\times', ['\\abs', '8']], '+', ['\\exp', ['-', '\\abs', '1']]],
+        ['5', '\\times', '6', '\\times', ['8', '+', ['9', '\\div', '56']]],
+    ]
+    for expression in expr:
+        print(AST_to_expr(expression))
 #endregion
