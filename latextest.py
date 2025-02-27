@@ -1399,3 +1399,4 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Error processing '{expr}': {e}")
             continue
+    print(latex_to_list(r'\frac{\frac{abc}{xyz}+\ln(2)}{abc}+\sum_{i=1}^{10}{i^2}=\int_{0}^{1}{e^xdx}+\lim_{x\rightarrow0}{\frac{e^x}{\sin(x)}}'))

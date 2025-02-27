@@ -163,9 +163,10 @@ class numfrac:#分数类
                 raise TypeError(f"{type(other)} can't be used in power")
         return numfrac(new_num,new_den)
 
-    # def __rpow__(self, other):
-    #     if other is int():
-    #         return numfrac(self.__value__ ** other,1)
+    def __rpow__(self, other):
+        if self.numerator is int() and other is int():
+            return numsqrt(other**self.numerator,self.denominator)
+        else:return float(other ** self.__value__)
 
     def __lt__(self, other):
         match other:
@@ -269,10 +270,17 @@ class numsqrt:#根式类
                 return other.__add__(self)#调用mix类的加法函数
             case _:raise TypeError(f"{isinstance(other)} can't add with a numfrac")
         #不能进行加法,抛出typeerror
+
+    def __radd__(self,other):#右加法
+        return self.__add__(other)#调用加法函数
     
     def __sub__(self,other):#减法
         other = other*-1#取相反数
         return self.__add__(other)#计算加法
+    
+    def __rsub__(self,other):#右减法
+        self = self*-1#取相反数
+        return self.__add__(other)#调用减法函数
     
     def __mul__(self,other):#乘法
         match other:
@@ -291,10 +299,17 @@ class numsqrt:#根式类
             case nummix():#如果other为混合类
                 return other.__mul__(self)#调用mix类的乘法函数
             case _:raise TypeError(f"{isinstance(other)} can't point with a numfrac")
+
+    def __rmul__(self,other):#右乘法
+        return self.__mul__(other)#调用乘法函数
     
     def __truediv__(self,other):#除法
         other = numfrac(1,other)#取倒数，递归调用分数类初始化函数
         return self.__mul__(other)
+    
+    def __rtruediv__(self,other):#右除法
+        self = numfrac(1,self)#取倒数，递归调用分数类初始化函数
+        return self.__mul__(other)#调用乘法函数
 
     def __pow__(self, other):#幂
         match other:
@@ -306,6 +321,9 @@ class numsqrt:#根式类
                 return float(self.__value__**other)
             case _:#幂次不是整数，直接转为浮点数计算
                 return float(self.__value__**other.__value__)
+            
+    def __rpow__(self,other):#右幂
+        return float(other**self.__value__)#调用幂函数
     
     def __lt__(self,other):#小于比较函数
         match other:
@@ -405,9 +423,16 @@ class nummix:#根式混合类，目前只支持两个的混合，其他类型会
                 return self.content1 + self.content2 + other.content1 + other.content2#递归调用根式计算类函数
             case _:raise TypeError(f"{type(other)} can't be added to nummix")
 
+    def __radd__(self,other):#右加法运算
+        return other + self#调用加法函数
+
     def __sub__(self, other):
         other *= -1#取相反数
         return self + other#调用加法函数
+    
+    def __rsub__(self, other):#右减法运算
+        self *= -1#取相反数
+        return other + self#调用加法函数
 
     def __mul__(self, other):#乘法函数
         match other:#判断other类型
@@ -422,9 +447,16 @@ class nummix:#根式混合类，目前只支持两个的混合，其他类型会
             case numsqrt():#返回根式计算
                 return self.content1*other+self.content2*other#调用根式类乘法
             case _:raise TypeError(f"{type(other)} can't be multiplied with nummix")
+
+    def __rmul__(self, other):#右乘法运算
+        return self*other#调用乘法函数
     
     def __truediv__(self,other):#除法
         other = numfrac(1,other)#取倒数
+        return self*other#调用乘法
+    
+    def __rtruediv__(self,other):#右除法运算
+        self = numfrac(1,self)#取倒数
         return self*other#调用乘法
 
     def __pow__(self,other):#指数
@@ -439,6 +471,9 @@ class nummix:#根式混合类，目前只支持两个的混合，其他类型会
             case nummix()|numfrac()|numsqrt():
                 return self.__value__**other.__values__#浮点数计算
             case _:raise TypeError(f"{type(other)} can't be powered with nummix")
+
+    def __rpow__(self,other):#右指数运算
+        return float(other**self.__value__)#浮点数计算
     
     def __lt__(self,other):#小于函数
         match other:
